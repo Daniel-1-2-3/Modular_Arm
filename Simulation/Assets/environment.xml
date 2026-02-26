@@ -1,0 +1,20 @@
+<light directional="true" castshadow="false" diffuse=".3 .3 .3" specular="0.3 0.3 0.3" pos="-1 -1 1" dir="1 1 -1"/>
+<light directional="true" diffuse=".3 .3 .3" specular="0.3 0.3 0.3" pos="1 -1 1" dir="-1 1 -1"/>
+<light directional="true" castshadow="false" diffuse=".3 .3 .3" specular="0.3 0.3 0.3" pos="0 1 1" dir="0 -1 -1"/>
+
+<body name="tablelink" pos="0 .6 0">
+    <geom name="table_top_surface" type="box" size=".7 .4 .027" pos="0 0 -.027" material="table_wood" group="1" contype="0" conaffinity="0"/>
+    <geom name="table_leg_mesh" type="mesh" mesh="tablebody" pos="0 0 -0.65" material="table_wood" group="1" contype="0" conaffinity="0"/>
+    <geom name="table_collision" type="box" size="0.7 0.4 0.46" pos="0 0 -0.46" material="table_col" group="4" contype="0" conaffinity="1"/>
+
+    <include file="robot.xml"/>
+</body>
+
+<body name="RetainingWall" pos="0.0 0.6 0.06">
+    <geom name="wall_back"  type="box" size=".7 .01 .06" pos="0 -0.39 0" material="wall_metal" contype="0" conaffinity="1" condim="3"/>
+    <geom name="wall_front" type="box" size=".7 .01 .06" pos="0 0.39 0"  material="wall_metal" contype="0" conaffinity="1" condim="3"/>
+    <geom name="wall_left"  type="box" size=".01 .38 .06" pos="-0.69 0 0" material="wall_metal" contype="0" conaffinity="1" condim="3"/>
+    <geom name="wall_right" type="box" size=".01 .38 .06" pos="0.69 0 0"  material="wall_metal" contype="0" conaffinity="1" condim="3"/>
+</body>
+
+<geom name="floor" type="plane" size="4 4 .1" pos="0 0 -.913" material="basic_floor" contype="1" conaffinity="1" condim="3"/>

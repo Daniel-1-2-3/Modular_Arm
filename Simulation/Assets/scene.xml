@@ -1,0 +1,13 @@
+<mujoco model="modular_arm_playground">
+    <include file="environment_assets.xml"/>
+
+    <worldbody>
+        <include file="environment_world.xml"/>
+
+        <body name="mocap_target" mocap="true" pos="0.2 0.6 0.2">
+            <geom type="sphere" size="0.02" rgba="1 0 0 0.5" contype="0" conaffinity="0"/>
+        </body>
+
+        <camera name="cam0" pos="3 0 0.8" xyaxes="0 1 0 0 0 1" fovy="45"/>
+    </worldbody>
+</mujoco>

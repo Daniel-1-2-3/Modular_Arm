@@ -1,0 +1,11 @@
+{
+  "documentId": "74600946aa49f0975d72af5b",
+  "assemblyName": "ArmAssemble",
+  "outputFormat": "urdf",
+  "robotName": "modular_arm",
+  "drawFrames": true,
+  "drawCollisions": false,
+  "useNames": true,
+  "mergeSTLs": "no",
+  "simplifySTLs": "all"
+}

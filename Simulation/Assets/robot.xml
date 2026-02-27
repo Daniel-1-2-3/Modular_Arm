@@ -2,9 +2,10 @@
   <compiler angle="radian" inertiafromgeom="true"/>
 
   <asset>
-    <mesh name="Bot1" file="../Meshes/Bot1.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="MidSegment" file="../Meshes/MidSegment.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="EndSegment" file="../Meshes/EndSegment.stl" scale="0.001 0.001 0.001"/>
+    <!-- 1.5x larger than original 0.001 -->
+    <mesh name="Bot1"       file="../Meshes/Bot1.stl"       scale="0.0015 0.0015 0.0015"/>
+    <mesh name="MidSegment" file="../Meshes/MidSegment.stl" scale="0.0015 0.0015 0.0015"/>
+    <mesh name="EndSegment" file="../Meshes/EndSegment.stl" scale="0.0015 0.0015 0.0015"/>
   </asset>
 
   <default>
@@ -13,64 +14,58 @@
   </default>
 
   <worldbody>
-    <body name="BaseMount" pos="0.4 0.6 0.032">
+    <!-- World placement unchanged -->
+    <body name="BaseMount" pos="0.4 0.6 0.048">
 
-      <!-- Base joint frame stays unrotated (clean yaw about world Z) -->
       <body name="Bot1_body">
-        <joint name="j_base"
+        <joint name="j_a_base"
                type="hinge"
                axis="0 0 1"
                pos="0 0 0"
                range="-3.14159265 3.14159265"/>
 
-        <!-- Rotate the visual and the entire child chain together -->
         <body name="Bot1_chain" euler="0 1.5707963 0">
           <geom type="mesh" mesh="Bot1"/>
 
           <body name="MidSegment_body" pos="0 0 0" euler="0 0 3.14159265">
-            <joint name="j_mid"
+            <joint name="j_b_mid"
                    type="hinge"
                    axis="0 1 0"
                    pos="0 0 0"
                    range="-3.14 3.14"/>
             <geom type="mesh" mesh="MidSegment"/>
 
+            <!-- Offset scaled by 1.5 -->
             <body name="EndSegment_body"
-                  pos="0.206500 -1.323e-7 -6.113e-11"
+                  pos="0.309750 -1.9845e-7 -9.1695e-11"
                   euler="1.57079632679 0 0">
-              <joint name="j_end"
+              <joint name="j_c_end"
                      type="hinge"
                      axis="0 0 -1"
                      pos="0 0 0"
                      range="-3.14 3.14"/>
               <geom type="mesh" mesh="EndSegment"/>
             </body>
+
           </body>
-
         </body>
-      </body>
 
+      </body>
     </body>
   </worldbody>
 
-  <!--
-    "Hold position + stall on collision" setup:
-    - Higher kp/kv = stiffer hold
-    - forcelimited + forcerange = torque saturation (so it stalls instead of shoving everything around forever)
-    If a joint still gets backdriven, increase its forcerange magnitude.
-  -->
   <actuator>
-    <position joint="j_base"
+    <position joint="j_a_base"
               kp="800" kv="80"
               forcelimited="true" forcerange="-80 80"
               ctrlrange="-3.14159265 3.14159265"/>
 
-    <position joint="j_mid"
+    <position joint="j_b_mid"
               kp="700" kv="70"
               forcelimited="true" forcerange="-60 60"
               ctrlrange="-3.14 3.14"/>
 
-    <position joint="j_end"
+    <position joint="j_c_end"
               kp="600" kv="60"
               forcelimited="true" forcerange="-40 40"
               ctrlrange="-3.14 3.14"/>

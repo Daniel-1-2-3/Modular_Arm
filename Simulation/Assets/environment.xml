@@ -58,30 +58,8 @@
             contype="1" conaffinity="1" solref="0.0001 2" solimp="0.99 0.99 0.0001"/>
     </body>
 
-    <body name="RetainingWall" pos="0.0 0.6 0.06">
-      <geom name="wall_back"
-            type="box" size=".7 .01 .06" pos="0 -0.39 0"
-            material="wall_metal"
-            contype="0" conaffinity="1" condim="3"/>
-
-      <geom name="wall_front"
-            type="box" size=".7 .01 .06" pos="0 0.39 0"
-            material="wall_metal"
-            contype="0" conaffinity="1" condim="3"/>
-
-      <geom name="wall_left"
-            type="box" size=".01 .38 .06" pos="-0.69 0 0"
-            material="wall_metal"
-            contype="0" conaffinity="1" condim="3"/>
-
-      <geom name="wall_right"
-            type="box" size=".01 .38 .06" pos="0.69 0 0"
-            material="wall_metal"
-            contype="0" conaffinity="1" condim="3"/>
-    </body>
-
     <geom name="floor"
-          type="plane" size="4 4 .1" pos="0 0 -.913"
+          type="plane" size="12 12 .1" pos="0 0 -.913"
           material="basic_floor"
           contype="1" conaffinity="1" condim="3"/>
   </worldbody>

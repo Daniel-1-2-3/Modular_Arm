@@ -7,8 +7,9 @@
     </body>
 
     <camera name="cam0"
-            pos="8 -8 4"
-            target="Bot1_body"
-            fovy="35"/>
+        pos="-0.780 -0.615 1.1"
+        mode="targetbody"
+        target="Bot1_body"
+        fovy="45"/>
   </worldbody>
 </mujoco>

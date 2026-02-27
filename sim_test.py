@@ -43,7 +43,6 @@ if __name__ == "__main__":
     env = ModularArmEnv(xml_path=os.path.join("Simulation", "Assets", "scene.xml"))
     
     print("Use W/A/S/D to move, R/F to move up/down. Press 'q' to quit.")
-    
     while True:
         rgb = env.step(n_substeps=10)
         

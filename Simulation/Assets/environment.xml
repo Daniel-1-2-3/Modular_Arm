@@ -1,20 +1,88 @@
-<light directional="true" castshadow="false" diffuse=".3 .3 .3" specular="0.3 0.3 0.3" pos="-1 -1 1" dir="1 1 -1"/>
-<light directional="true" diffuse=".3 .3 .3" specular="0.3 0.3 0.3" pos="1 -1 1" dir="-1 1 -1"/>
-<light directional="true" castshadow="false" diffuse=".3 .3 .3" specular="0.3 0.3 0.3" pos="0 1 1" dir="0 -1 -1"/>
+<mujocoinclude>
+  <option timestep="0.0025" iterations="50" tolerance="1e-10"
+          solver="Newton" jacobian="dense" cone="elliptic"/>
 
-<body name="tablelink" pos="0 .6 0">
-    <geom name="table_top_surface" type="box" size=".7 .4 .027" pos="0 0 -.027" material="table_wood" group="1" contype="0" conaffinity="0"/>
-    <geom name="table_leg_mesh" type="mesh" mesh="tablebody" pos="0 0 -0.65" material="table_wood" group="1" contype="0" conaffinity="0"/>
-    <geom name="table_collision" type="box" size="0.7 0.4 0.46" pos="0 0 -0.46" material="table_col" group="4" contype="0" conaffinity="1"/>
+  <asset>
+    <texture type="skybox" builtin="gradient"
+             rgb1=".50 .495 .48" rgb2=".50 .495 .48"
+             width="32" height="32"/>
 
-    <include file="robot.xml"/>
-</body>
+    <texture name="T_table" type="cube" file="../Textures/wood2.png"/>
+    <texture name="T_floor" type="2d" file="../Textures/floor2.png"/>
+    <texture name="T_wallmetal" type="cube" file="../Textures/metal.png"/>
 
-<body name="RetainingWall" pos="0.0 0.6 0.06">
-    <geom name="wall_back"  type="box" size=".7 .01 .06" pos="0 -0.39 0" material="wall_metal" contype="0" conaffinity="1" condim="3"/>
-    <geom name="wall_front" type="box" size=".7 .01 .06" pos="0 0.39 0"  material="wall_metal" contype="0" conaffinity="1" condim="3"/>
-    <geom name="wall_left"  type="box" size=".01 .38 .06" pos="-0.69 0 0" material="wall_metal" contype="0" conaffinity="1" condim="3"/>
-    <geom name="wall_right" type="box" size=".01 .38 .06" pos="0.69 0 0"  material="wall_metal" contype="0" conaffinity="1" condim="3"/>
-</body>
+    <material name="basic_floor" texture="T_floor"
+              texrepeat="12 12" shininess=".3" specular="0.5" reflectance="0.2"/>
+    <material name="table_wood" texture="T_table"
+              shininess=".3" specular="0.5"/>
+    <material name="table_col" rgba="0.3 0.3 1.0 0.5"
+              shininess="0" specular="0"/>
+    <material name="wall_metal" texture="T_wallmetal"
+              shininess="1" reflectance="1" specular=".5"/>
 
-<geom name="floor" type="plane" size="4 4 .1" pos="0 0 -.913" material="basic_floor" contype="1" conaffinity="1" condim="3"/>
+    <mesh name="tablebody" file="../Meshes/tablebody.stl" scale="1 1 1"/>
+    <mesh name="tabletop" file="../Meshes/tabletop.stl" scale="1 1 1"/>
+  </asset>
+
+  <visual>
+    <map fogstart="1.5" fogend="5" force="0.1" znear="0.01"/>
+    <quality shadowsize="4096" offsamples="4"/>
+    <headlight ambient="0.4 0.4 0.4"/>
+  </visual>
+
+  <worldbody>
+    <light directional="true" castshadow="false"
+           diffuse=".3 .3 .3" specular="0.3 0.3 0.3"
+           pos="-1 -1 1" dir="1 1 -1"/>
+    <light directional="true"
+           diffuse=".3 .3 .3" specular="0.3 0.3 0.3"
+           pos="1 -1 1" dir="-1 1 -1"/>
+    <light directional="true" castshadow="false"
+           diffuse=".3 .3 .3" specular="0.3 0.3 0.3"
+           pos="0 1 1" dir="0 -1 -1"/>
+
+    <body name="tablelink" pos="0 .6 0">
+      <geom name="table_top_surface"
+            type="box" size=".7 .4 .027" pos="0 0 -.027"
+            material="table_wood" group="1"
+            contype="0" conaffinity="0"/>
+
+      <geom name="table_leg_mesh"
+            type="mesh" mesh="tablebody" pos="0 0 -0.65"
+            material="table_wood" group="1"
+            contype="0" conaffinity="0"/>
+
+      <geom name="table_collision"
+            type="box" size="0.7 0.4 0.46" pos="0 0 -0.46"
+            material="table_col" group="4"
+            contype="1" conaffinity="1" solref="0.0001 2" solimp="0.99 0.99 0.0001"/>
+    </body>
+
+    <body name="RetainingWall" pos="0.0 0.6 0.06">
+      <geom name="wall_back"
+            type="box" size=".7 .01 .06" pos="0 -0.39 0"
+            material="wall_metal"
+            contype="0" conaffinity="1" condim="3"/>
+
+      <geom name="wall_front"
+            type="box" size=".7 .01 .06" pos="0 0.39 0"
+            material="wall_metal"
+            contype="0" conaffinity="1" condim="3"/>
+
+      <geom name="wall_left"
+            type="box" size=".01 .38 .06" pos="-0.69 0 0"
+            material="wall_metal"
+            contype="0" conaffinity="1" condim="3"/>
+
+      <geom name="wall_right"
+            type="box" size=".01 .38 .06" pos="0.69 0 0"
+            material="wall_metal"
+            contype="0" conaffinity="1" condim="3"/>
+    </body>
+
+    <geom name="floor"
+          type="plane" size="4 4 .1" pos="0 0 -.913"
+          material="basic_floor"
+          contype="1" conaffinity="1" condim="3"/>
+  </worldbody>
+</mujocoinclude>

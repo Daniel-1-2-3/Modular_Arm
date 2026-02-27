@@ -1,354 +1,79 @@
-<mujoco>
-  <asset>
-    <mesh name="dchub" content_type="model/stl" file="../Meshes/dchub.stl"/>
-    <mesh name="servobasescrewa" content_type="model/stl" file="../Meshes/servobasescrewa.stl"/>
-    <mesh name="servobodyhidden" content_type="model/stl" file="../Meshes/servobodyhidden.stl"/>
-    <mesh name="dcsocketb" content_type="model/stl" file="../Meshes/dcsocketb.stl"/>
-    <mesh name="platebase1_2_stilt1" content_type="model/stl" file="../Meshes/platebase1_2_stilt1.stl"/>
-    <mesh name="servobasescrewc" content_type="model/stl" file="../Meshes/servobasescrewc.stl"/>
-    <mesh name="platebase1_3" content_type="model/stl" file="../Meshes/platebase1_3.stl"/>
-    <mesh name="servogearbase" content_type="model/stl" file="../Meshes/servogearbase.stl"/>
-    <mesh name="servobasescrewb" content_type="model/stl" file="../Meshes/servobasescrewb.stl"/>
-    <mesh name="servogear" content_type="model/stl" file="../Meshes/servogear.stl"/>
-    <mesh name="screwhub_v0_1_6mm" content_type="model/stl" file="../Meshes/screwhub_v0_1_6mm.stl"/>
-    <mesh name="dcsocketa" content_type="model/stl" file="../Meshes/dcsocketa.stl"/>
-    <mesh name="motormountleft" content_type="model/stl" file="../Meshes/motormountleft.stl"/>
-    <mesh name="92010a811_passivated_18_8_stainless_steel_phillips_flat_head_screw" content_type="model/stl" file="../Meshes/92010a811_passivated_18_8_stainless_steel_phillips_flat_head_screw.stl"/>
-    <mesh name="dcscrewb" content_type="model/stl" file="../Meshes/dcscrewb.stl"/>
-    <mesh name="servobase" content_type="model/stl" file="../Meshes/servobase.stl"/>
-    <mesh name="servomountbracket" content_type="model/stl" file="../Meshes/servomountbracket.stl"/>
-    <mesh name="dcscrewa" content_type="model/stl" file="../Meshes/dcscrewa.stl"/>
-    <mesh name="dcbody" content_type="model/stl" file="../Meshes/dcbody.stl"/>
-    <mesh name="servobasescrewd" content_type="model/stl" file="../Meshes/servobasescrewd.stl"/>
-    <mesh name="servosocket" content_type="model/stl" file="../Meshes/servosocket.stl"/>
-    <mesh name="motormountright" content_type="model/stl" file="../Meshes/motormountright.stl"/>
-    <mesh name="servobody" content_type="model/stl" file="../Meshes/servobody.stl"/>
-    <mesh name="platebase1_1" content_type="model/stl" file="../Meshes/platebase1_1.stl"/>
-    <mesh name="platebase1_2_stilt2" content_type="model/stl" file="../Meshes/platebase1_2_stilt2.stl"/>
-    <mesh name="servobodycap" content_type="model/stl" file="../Meshes/servobodycap.stl"/>
-    <mesh name="platebase2_2" content_type="model/stl" file="../Meshes/platebase2_2.stl"/>
-    <mesh name="motormountrightsmall" content_type="model/stl" file="../Meshes/motormountrightsmall.stl"/>
-    <mesh name="screwhub_v0_1_3mm" content_type="model/stl" file="../Meshes/screwhub_v0_1_3mm.stl"/>
-    <mesh name="platebase2_1" content_type="model/stl" file="../Meshes/platebase2_1.stl"/>
-    <mesh name="motormountleftsmall" content_type="model/stl" file="../Meshes/motormountleftsmall.stl"/>
-    <mesh name="liftaxle2" content_type="model/stl" file="../Meshes/liftaxle2.stl"/>
-    <mesh name="liftaxle3" content_type="model/stl" file="../Meshes/liftaxle3.stl"/>
-    <mesh name="lockpin" content_type="model/stl" file="../Meshes/lockpin.stl"/>
-    <mesh name="lockcap" content_type="model/stl" file="../Meshes/lockcap.stl"/>
-    <mesh name="liftaxle4" content_type="model/stl" file="../Meshes/liftaxle4.stl"/>
-    <mesh name="liftaxle1" content_type="model/stl" file="../Meshes/liftaxle1.stl"/>
-    <mesh name="liftarmbot1" content_type="model/stl" file="../Meshes/liftarmbot1.stl"/>
-    <mesh name="m1_6_x_2_5mm_lg_flat_head_screws_jis" content_type="model/stl" file="../Meshes/m1_6_x_2_5mm_lg_flat_head_screws_jis.stl"/>
-    <mesh name="worm_0_2m_x_3_25mm_od_x_1mm_id" content_type="model/stl" file="../Meshes/worm_0_2m_x_3_25mm_od_x_1mm_id.stl"/>
-    <mesh name="n20_right_angle_gearbox___7_9mm_spacer" content_type="model/stl" file="../Meshes/n20_right_angle_gearbox___7_9mm_spacer.stl"/>
-    <mesh name="n20_right_angle_gearbox___output_shaft" content_type="model/stl" file="../Meshes/n20_right_angle_gearbox___output_shaft.stl"/>
-    <mesh name="n20_dc_motor_face_adaptor" content_type="model/stl" file="../Meshes/n20_dc_motor_face_adaptor.stl"/>
-    <mesh name="gear_0_2m_23t___20_degree_pressure_angle" content_type="model/stl" file="../Meshes/gear_0_2m_23t___20_degree_pressure_angle.stl"/>
-    <mesh name="worm_gear_0_2m_20t___1mm_id" content_type="model/stl" file="../Meshes/worm_gear_0_2m_20t___1mm_id.stl"/>
-    <mesh name="n20_right_angle_gearbox___output_shaft_bushing" content_type="model/stl" file="../Meshes/n20_right_angle_gearbox___output_shaft_bushing.stl"/>
-    <mesh name="gear_0_2m_9t___20_degree_pressure_angle" content_type="model/stl" file="../Meshes/gear_0_2m_9t___20_degree_pressure_angle.stl"/>
-    <mesh name="gear_0_3m_21t___20_degree_pressure_angle" content_type="model/stl" file="../Meshes/gear_0_3m_21t___20_degree_pressure_angle.stl"/>
-    <mesh name="m1_4_x_3mm_lg_pan_head_screws_jis" content_type="model/stl" file="../Meshes/m1_4_x_3mm_lg_pan_head_screws_jis.stl"/>
-    <mesh name="n20_right_angle_gearbox___bottom_plate" content_type="model/stl" file="../Meshes/n20_right_angle_gearbox___bottom_plate.stl"/>
-    <mesh name="n20_right_angle_gearbox___bottom_plate_bushing" content_type="model/stl" file="../Meshes/n20_right_angle_gearbox___bottom_plate_bushing.stl"/>
-    <mesh name="n20_right_angle_gearbox___top_plate" content_type="model/stl" file="../Meshes/n20_right_angle_gearbox___top_plate.stl"/>
-    <mesh name="gear_0_2m_10t___20_degree_pressure_angle" content_type="model/stl" file="../Meshes/gear_0_2m_10t___20_degree_pressure_angle.stl"/>
-    <mesh name="n20_right_angle_gearbox___top_plate_bushing" content_type="model/stl" file="../Meshes/n20_right_angle_gearbox___top_plate_bushing.stl"/>
-    <mesh name="gear_0_3m_10t___20_degree_pressure_angle" content_type="model/stl" file="../Meshes/gear_0_3m_10t___20_degree_pressure_angle.stl"/>
-    <mesh name="camlens1" content_type="model/stl" file="../Meshes/camlens1.stl"/>
-    <mesh name="camlens2" content_type="model/stl" file="../Meshes/camlens2.stl"/>
-    <mesh name="camplate" content_type="model/stl" file="../Meshes/camplate.stl"/>
-    <mesh name="n20_micro_dc_motor_new" content_type="model/stl" file="../Meshes/n20_micro_dc_motor_new.stl"/>
-    <mesh name="clawcap1" content_type="model/stl" file="../Meshes/clawcap1.stl"/>
-    <mesh name="clawcap2" content_type="model/stl" file="../Meshes/clawcap2.stl"/>
-    <mesh name="platebase3_1" content_type="model/stl" file="../Meshes/platebase3_1.stl"/>
-    <mesh name="platebase3_2" content_type="model/stl" file="../Meshes/platebase3_2.stl"/>
-    <mesh name="liftarmbot2" content_type="model/stl" file="../Meshes/liftarmbot2.stl"/>
-    <mesh name="text_gnd" content_type="model/stl" file="../Meshes/text_gnd.stl"/>
-    <mesh name="c_0603_1608metric001" content_type="model/stl" file="../Meshes/c_0603_1608metric001.stl"/>
-    <mesh name="sot_363_sc_70_6" content_type="model/stl" file="../Meshes/sot_363_sc_70_6.stl"/>
-    <mesh name="text_sda" content_type="model/stl" file="../Meshes/text_sda.stl"/>
-    <mesh name="text_vl53l0x_v2" content_type="model/stl" file="../Meshes/text_vl53l0x_v2.stl"/>
-    <mesh name="text_vin" content_type="model/stl" file="../Meshes/text_vin.stl"/>
-    <mesh name="text_gpio1" content_type="model/stl" file="../Meshes/text_gpio1.stl"/>
-    <mesh name="text_xshut" content_type="model/stl" file="../Meshes/text_xshut.stl"/>
-    <mesh name="troufix01" content_type="model/stl" file="../Meshes/troufix01.stl"/>
-    <mesh name="r_array_convex_4x0603" content_type="model/stl" file="../Meshes/r_array_convex_4x0603.stl"/>
-    <mesh name="pcb_pink" content_type="model/stl" file="../Meshes/pcb_pink.stl"/>
-    <mesh name="r_0603_1608metric001" content_type="model/stl" file="../Meshes/r_0603_1608metric001.stl"/>
-    <mesh name="c_0603_1608metric" content_type="model/stl" file="../Meshes/c_0603_1608metric.stl"/>
-    <mesh name="r_0603_1608metric" content_type="model/stl" file="../Meshes/r_0603_1608metric.stl"/>
-    <mesh name="text_scl" content_type="model/stl" file="../Meshes/text_scl.stl"/>
-    <mesh name="vl53l0x" content_type="model/stl" file="../Meshes/vl53l0x.stl"/>
-    <mesh name="c_0603_1608metric002" content_type="model/stl" file="../Meshes/c_0603_1608metric002.stl"/>
-    <mesh name="sot_23" content_type="model/stl" file="../Meshes/sot_23.stl"/>
-    <mesh name="trou1" content_type="model/stl" file="../Meshes/trou1.stl"/>
-    <mesh name="clawmtrside" content_type="model/stl" file="../Meshes/clawmtrside.stl"/>
-    <mesh name="clawfollowside" content_type="model/stl" file="../Meshes/clawfollowside.stl"/>    <material name="mat_black" rgba="0.1 0.1 0.1 1"/>
-    <material name="mat_silver" rgba="0.7 0.7 0.7 1"/>
-    <material name="mat_gold" rgba="0.8 0.6 0.1 1"/>
+<mujocoinclude>
+  <compiler angle="radian" inertiafromgeom="true"/>
 
+  <asset>
+    <mesh name="Bot1" file="../Meshes/Bot1.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="MidSegment" file="../Meshes/MidSegment.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="EndSegment" file="../Meshes/EndSegment.stl" scale="0.001 0.001 0.001"/>
   </asset>
 
+  <default>
+    <geom contype="1" conaffinity="1" density="700"/>
+    <joint damping="30" frictionloss="2" limited="true"/>
+  </default>
+
   <worldbody>
-    <geom pos="0.00818371 0.0107238 -0.14449" quat="0.566887 0.56623 0.551905 -0.231137" type="mesh" rgba="0 0 0 1" mesh="dchub"/>
-    <geom pos="0.0643855 0.0331357 -0.111145" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewa"/>
-    <geom pos="0.0643855 0.0331357 -0.111145" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.647059 0.517647 0 1" mesh="servobodyhidden"/>
-    <geom pos="0.00818371 0.0107238 -0.14449" quat="0.566887 0.56623 0.551905 -0.231137" type="mesh" rgba="0 0 0 1" mesh="dcsocketb"/>
-    <geom pos="0.042217 -0.0573809 -0.188498" quat="0.790641 -0.564288 -0.23741 -0.0101299" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="platebase1_2_stilt1"/>
-    <geom pos="0.0643855 0.0331357 -0.111145" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewc"/>
-    <geom pos="0.0422068 -0.0573785 -0.188499" quat="0.790641 -0.564288 -0.237411 -0.0101289" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="platebase1_3"/>
-    <geom pos="0.0643855 0.0331357 -0.111145" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="servogearbase"/>
-    <geom pos="0.0643855 0.0331357 -0.111145" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewb"/>
-    <geom pos="0.0643855 0.0331357 -0.111145" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.827451 0.666667 0.129412 1" mesh="servogear"/>
-    <geom pos="0.14809 0.0584597 -0.0802047" quat="0.564288 0.790641 -0.0101289 0.237411" type="mesh" rgba="0.65098 0.486275 0.0196078 1" mesh="screwhub_v0_1_6mm"/>
-    <geom pos="0.143018 0.0490156 -0.0856898" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0 0 0 1" mesh="dcsocketa"/>
-    <geom pos="0.0407871 -0.0591933 -0.184061" quat="0.790641 -0.564288 -0.237411 -0.0101289" type="mesh" rgba="0.811765 0.858824 0.898039 1" mesh="motormountleft"/>
-    <geom pos="-0.00271175 0.0156334 -0.145968" quat="0.160713 0.175037 0.160056 -0.958079" type="mesh" rgba="0.65098 0.486275 0.0196078 1" mesh="screwhub_v0_1_6mm"/>
-    <geom pos="0.00818371 0.0107238 -0.14449" quat="0.566887 0.56623 0.551905 -0.231137" type="mesh" rgba="0.964706 0.964706 0.952941 1" mesh="92010a811_passivated_18_8_stainless_steel_phillips_flat_head_screw"/>
-    <geom pos="0.00818371 0.0107238 -0.14449" quat="0.566887 0.56623 0.551905 -0.231137" type="mesh" rgba="0.964706 0.964706 0.952941 1" mesh="dcscrewb"/>
-    <geom pos="0.0643855 0.0331357 -0.111145" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobase"/>
-    <geom pos="0.143018 0.0490156 -0.0856898" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0 0 0 1" mesh="dchub"/>
-    <geom pos="0.0740265 -0.00685636 -0.106951" quat="0.160056 -0.958079 -0.160713 -0.175037" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="servomountbracket"/>
-    <geom pos="0.00818371 0.0107238 -0.14449" quat="0.566887 0.56623 0.551905 -0.231137" type="mesh" rgba="0.964706 0.964706 0.952941 1" mesh="dcscrewa"/>
-    <geom pos="0.00818371 0.0107238 -0.14449" quat="0.566887 0.56623 0.551905 -0.231137" type="mesh" rgba="0.960784 0.960784 0.964706 1" mesh="dcbody"/>
-    <geom pos="0.0643855 0.0331357 -0.111145" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewd"/>
-    <geom pos="0.0643855 0.0331357 -0.111145" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="servosocket"/>
-    <geom pos="0.15788 -0.0259399 -0.132998" quat="0.790641 -0.564288 -0.237411 -0.0101289" type="mesh" rgba="0.811765 0.858824 0.898039 1" mesh="motormountright"/>
-    <geom pos="0.143018 0.0490156 -0.0856898" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.960784 0.960784 0.964706 1" mesh="dcbody"/>
-    <geom pos="0.0643855 0.0331357 -0.111145" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.729412 0.25098 0.105882 1" mesh="servobody"/>
-    <geom pos="0.0422068 -0.0573785 -0.188499" quat="0.790641 -0.564288 -0.237411 -0.0101289" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="platebase1_1"/>
-    <geom pos="0.143018 0.0490156 -0.0856898" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0 0 0 1" mesh="dcsocketb"/>
-    <geom pos="0.0422218 -0.057375 -0.188494" quat="0.790634 -0.564288 -0.237434 -0.0101124" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="platebase1_2_stilt2"/>
-    <geom pos="0.143018 0.0490156 -0.0856898" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.964706 0.964706 0.952941 1" mesh="dcscrewa"/>
-    <geom pos="0.00818371 0.0107238 -0.14449" quat="0.566887 0.56623 0.551905 -0.231137" type="mesh" rgba="0 0 0 1" mesh="dcsocketa"/>
-    <geom pos="0.143018 0.0490156 -0.0856898" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.964706 0.964706 0.952941 1" mesh="92010a811_passivated_18_8_stainless_steel_phillips_flat_head_screw"/>
-    <geom pos="0.143018 0.0490156 -0.0856898" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.964706 0.964706 0.952941 1" mesh="dcscrewb"/>
-    <geom pos="0.0643855 0.0331357 -0.111145" quat="-0.231137 -0.551905 0.56623 -0.566887" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobodycap"/>
-    <body name="midsegment" pos="0.0409669 0.026485 -0.121358" quat="0.406174 0.391192 0.391849 0.726942">
-      <inertial pos="0.00508586 0.118348 0.0355966" quat="0.674917 0.737068 -0.0311396 -0.015763" mass="0.78329" diaginertia="0.0043502 0.0032474 0.00143068"/>
-      <joint name="Seg1Seg2" pos="0 0 0" axis="0 0 1" range="0 1.5708"/>
-      <geom pos="0.0294999 0.094 -0.046" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="platebase2_2"/>
-      <geom pos="-1.32341e-07 0.2065 0.0274" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewa"/>
-      <geom pos="-1.32341e-07 0.2065 0.0274" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.647059 0.517647 0 1" mesh="servobodyhidden"/>
-      <geom pos="-1.32341e-07 0.2065 0.0274" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewc"/>
-      <geom pos="-1.32341e-07 0.2065 0.0274" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="servogearbase"/>
-      <geom pos="0.0244999 0.094 0.086" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.811765 0.858824 0.898039 1" mesh="motormountrightsmall"/>
-      <geom pos="-1.32341e-07 0.2065 0.0274" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewb"/>
-      <geom pos="-1.32341e-07 0.2065 0.0274" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.827451 0.666667 0.129412 1" mesh="servogear"/>
-      <geom pos="0.00547987 0.182494 -0.0464512" quat="0.201762 -0.677711 0.201762 0.677711" type="mesh" rgba="0.972549 0.529412 0.00392157 1" mesh="screwhub_v0_1_3mm"/>
-      <geom pos="0.00547987 0.182494 0.114451" quat="0.677711 0.201762 -0.677711 0.201762" type="mesh" rgba="0.972549 0.529412 0.00392157 1" mesh="screwhub_v0_1_3mm"/>
-      <geom pos="-1.32341e-07 0.2065 0.0274" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobase"/>
-      <geom pos="-0.0155001 0.168264 0.0275" quat="0 -0.707107 0 -0.707107" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="servomountbracket"/>
-      <geom pos="-1.32341e-07 0.2065 0.0274" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewd"/>
-      <geom pos="-1.32341e-07 0.2065 0.0274" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="servosocket"/>
-      <geom pos="-1.32341e-07 0.2065 0.0274" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.729412 0.25098 0.105882 1" mesh="servobody"/>
-      <geom pos="0.0294999 0.094 -0.046" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="platebase2_1"/>
-      <geom pos="0.0244999 0.094 -0.046" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.811765 0.858824 0.898039 1" mesh="motormountleftsmall"/>
-      <geom pos="-1.32341e-07 0.2065 0.0274" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobodycap"/>
-      <geom pos="0 0 0.081" quat="0.5 0.5 -0.5 -0.5" type="mesh" rgba="0.529412 0.568627 0.6 1" mesh="liftaxle2"/>
-      <geom pos="0 0 0.012" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.529412 0.568627 0.6 1" mesh="liftaxle3"/>
-      <geom pos="0.014025 0.0606 -0.0165" quat="0.5 -0.5 -0.5 0.5" type="mesh" rgba="0.713726 0.760784 0.8 1" mesh="lockpin"/>
-      <geom pos="-0.014025 0.0606 0.0845" quat="0.5 0.5 0.5 0.5" type="mesh" rgba="0.713726 0.760784 0.8 1" mesh="lockpin"/>
-      <geom pos="-0.0175 0.05 0.091" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.6 0.580392 0.529412 1" mesh="lockcap"/>
-      <geom pos="0.0175 0.05 -0.023" quat="0 0 0.707107 0.707107" type="mesh" rgba="0.6 0.580392 0.529412 1" mesh="lockcap"/>
-      <geom pos="0 0 0.007" quat="0 0.707107 0 0.707107" type="mesh" rgba="0.529412 0.568627 0.6 1" mesh="liftaxle4"/>
-      <geom pos="0.00127684 -0.00126874 0.057" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.529412 0.568627 0.6 1" mesh="liftaxle1"/>
-      <geom pos="0.0175 -0.03 -0.007" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.6 0.580392 0.529412 1" mesh="liftarmbot1"/>
-      <geom pos="0.00547987 0.169994 0.110282" quat="0 0 0 -1" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_6_x_2_5mm_lg_flat_head_screws_jis"/>
-      <geom pos="0.00547987 0.170494 0.106001" quat="0.379928 0.596368 -0.596368 -0.379928" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="worm_0_2m_x_3_25mm_od_x_1mm_id"/>
-      <geom pos="0.00972987 0.184844 0.106001" quat="0.707107 0 -0.707107 0" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___7_9mm_spacer"/>
-      <geom pos="0.00547987 0.182494 0.101201" quat="0.5 0.5 -0.5 0.5" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_right_angle_gearbox___output_shaft"/>
-      <geom pos="0.00547987 0.168494 0.106001" quat="0 0 1 0" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_dc_motor_face_adaptor"/>
-      <geom pos="0.00253934 0.176246 0.109251" quat="0.707107 0 0 0.707107" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_23t___20_degree_pressure_angle"/>
-      <geom pos="0.00197987 0.172994 0.105801" quat="0.0226873 0 0 0.999743" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="worm_gear_0_2m_20t___1mm_id"/>
-      <geom pos="0.00547987 0.182494 0.109451" quat="0 0 0.707107 -0.707107" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___output_shaft_bushing"/>
-      <geom pos="0.00547987 0.177744 0.106026" quat="0.598325 0 0 0.801254" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_9t___20_degree_pressure_angle"/>
-      <geom pos="0.00122987 0.184844 0.106001" quat="0 -0.707107 0 -0.707107" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___7_9mm_spacer"/>
-      <geom pos="0.00547987 0.182494 0.105451" quat="0 -0.707107 0.707107 0" type="mesh" rgba="0.65098 0.619608 0.588235 1" mesh="gear_0_3m_21t___20_degree_pressure_angle"/>
-      <geom pos="0.00547987 0.169994 0.10172" quat="0 0 1 0" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_6_x_2_5mm_lg_flat_head_screws_jis"/>
-      <geom pos="0.00937084 0.170494 0.103277" quat="0.693493 -0.693493 -0.138087 -0.138087" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_4_x_3mm_lg_pan_head_screws_jis"/>
-      <geom pos="0.00547987 0.182494 0.110951" quat="0.5 -0.5 0.5 -0.5" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___bottom_plate"/>
-      <geom pos="0.00547987 0.182494 0.109951" quat="0.677711 0.677711 0.201762 0.201762" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___bottom_plate_bushing"/>
-      <geom pos="0.00547987 0.182494 0.102051" quat="0.5 -0.5 0.5 -0.5" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___top_plate"/>
-      <geom pos="0.00253934 0.176246 0.106026" quat="1 0 0 0" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_10t___20_degree_pressure_angle"/>
-      <geom pos="0.0015889 0.170494 0.108726" quat="0.693493 -0.693493 -0.138087 -0.138087" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_4_x_3mm_lg_pan_head_screws_jis"/>
-      <geom pos="0.00547987 0.182494 0.102051" quat="0 0 0.707107 -0.707107" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___top_plate_bushing"/>
-      <geom pos="0.00197987 0.172994 0.106026" quat="0.67559 0 0 0.737277" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_9t___20_degree_pressure_angle"/>
-      <geom pos="0.00547987 0.177744 0.105551" quat="0 0 1 0" type="mesh" rgba="0.65098 0.619608 0.588235 1" mesh="gear_0_3m_10t___20_degree_pressure_angle"/>
-      <geom pos="0.00547987 0.169994 -0.0422824" quat="0 1 0 0" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_6_x_2_5mm_lg_flat_head_screws_jis"/>
-      <geom pos="0.00547987 0.170494 -0.0380012" quat="0.596368 -0.379928 0.379928 -0.596368" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="worm_0_2m_x_3_25mm_od_x_1mm_id"/>
-      <geom pos="0.00122987 0.184844 -0.0380012" quat="0.707107 0 0.707107 0" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___7_9mm_spacer"/>
-      <geom pos="0.00547987 0.182494 -0.0332012" quat="0.5 0.5 0.5 -0.5" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_right_angle_gearbox___output_shaft"/>
-      <geom pos="0.00547987 0.168494 -0.0380012" quat="1 0 0 0" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_dc_motor_face_adaptor"/>
-      <geom pos="0.00842039 0.176246 -0.0412512" quat="0 0.707107 0.707107 0" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_23t___20_degree_pressure_angle"/>
-      <geom pos="0.00897987 0.172994 -0.0378012" quat="0 0.999743 0.0226873 0" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="worm_gear_0_2m_20t___1mm_id"/>
-      <geom pos="0.00547987 0.182494 -0.0414512" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___output_shaft_bushing"/>
-      <geom pos="0.00547987 0.177744 -0.0380262" quat="0 0.801254 0.598325 0" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_9t___20_degree_pressure_angle"/>
-      <geom pos="0.00972987 0.184844 -0.0380012" quat="0 -0.707107 0 0.707107" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___7_9mm_spacer"/>
-      <geom pos="0.00547987 0.182494 -0.0374512" quat="0.707107 0 0 -0.707107" type="mesh" rgba="0.65098 0.619608 0.588235 1" mesh="gear_0_3m_21t___20_degree_pressure_angle"/>
-      <geom pos="0.00547987 0.169994 -0.0337199" quat="1 0 0 0" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_6_x_2_5mm_lg_flat_head_screws_jis"/>
-      <geom pos="0.0015889 0.170494 -0.0352767" quat="0.138087 -0.138087 0.693493 0.693493" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_4_x_3mm_lg_pan_head_screws_jis"/>
-      <geom pos="0.00547987 0.182494 -0.0429512" quat="0.5 0.5 -0.5 -0.5" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___bottom_plate"/>
-      <geom pos="0.00547987 0.182494 -0.0419512" quat="0.201762 -0.201762 -0.677711 0.677711" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___bottom_plate_bushing"/>
-      <geom pos="0.00547987 0.182494 -0.0340512" quat="0.5 0.5 -0.5 -0.5" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___top_plate"/>
-      <geom pos="0.00842039 0.176246 -0.0380262" quat="0 0 -1 0" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_10t___20_degree_pressure_angle"/>
-      <geom pos="0.00937084 0.170494 -0.0407257" quat="0.138087 -0.138087 0.693493 0.693493" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_4_x_3mm_lg_pan_head_screws_jis"/>
-      <geom pos="0.00547987 0.182494 -0.0340512" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___top_plate_bushing"/>
-      <geom pos="0.00897987 0.172994 -0.0380262" quat="0 0.737277 0.67559 0" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_9t___20_degree_pressure_angle"/>
-      <geom pos="0.00547987 0.177744 -0.0375512" quat="1 0 0 0" type="mesh" rgba="0.65098 0.619608 0.588235 1" mesh="gear_0_3m_10t___20_degree_pressure_angle"/>
-      <geom pos="-0.0500802 0.086 0.053" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="camlens1"/>
-      <geom pos="-0.0500802 0.086 0.053" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="camlens2"/>
-      <geom pos="-0.05 0.086 0.053" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.286275 0.662745 0.329412 1" mesh="camplate"/>
-      <geom pos="0.00547987 0.168494 0.106001" quat="0 0 0.707107 -0.707107" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_micro_dc_motor_new"/>
-      <geom pos="0.00547987 0.168494 0.106001" quat="0 0 0.707107 -0.707107" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_micro_dc_motor_new"/>
-      <geom pos="0.00547987 0.168494 -0.0380012" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_micro_dc_motor_new"/>
-      <geom pos="0.00547987 0.168494 -0.0380012" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_micro_dc_motor_new"/>
-      <body name="endsegment" pos="-1.32341e-07 0.2065 6.11247e-11" quat="0.573576 0 0 -0.819152">
-        <inertial pos="0.00653483 0.120511 0.0347336" quat="0.675488 0.736115 -0.0247182 -0.0351912" mass="0.790945" diaginertia="0.00468665 0.00359787 0.00148089"/>
-        <joint name="Seg2Seg3" pos="0 0 0" axis="0 0 1" range="-1.91986 1.5708"/>
-        <geom pos="-0.0304601 0.201005 0.0524844" quat="0.707107 0 0 0.707107" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="clawcap1"/>
-        <geom pos="-0.0304601 0.200984 0.0154945" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="clawcap1"/>
-        <geom pos="-0.0224601 0.2085 0.0525" quat="0.5 0.5 0.5 -0.5" type="mesh" rgba="0.701961 0.701961 0.701961 1" mesh="clawcap2"/>
-        <geom pos="-0.00300013 0.201 0.0525" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewb"/>
-        <geom pos="-0.00300013 0.201 0.0525" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewa"/>
-        <geom pos="-0.00300013 0.201 0.0525" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.729412 0.25098 0.105882 1" mesh="servobody"/>
-        <geom pos="-0.00300013 0.201 0.0525" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobodycap"/>
-        <geom pos="-0.00300013 0.201 0.0525" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewd"/>
-        <geom pos="-0.00300013 0.201 0.0525" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="servosocket"/>
-        <geom pos="0.0244999 0.094 0.086" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.811765 0.858824 0.898039 1" mesh="motormountrightsmall"/>
-        <geom pos="-0.00300013 0.201 0.0525" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.647059 0.517647 0 1" mesh="servobodyhidden"/>
-        <geom pos="0.00547987 0.182494 -0.0464512" quat="0.201762 -0.677711 0.201762 0.677711" type="mesh" rgba="0.972549 0.529412 0.00392157 1" mesh="screwhub_v0_1_3mm"/>
-        <geom pos="-0.00300013 0.201 0.0525" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobasescrewc"/>
-        <geom pos="0.00547987 0.182494 0.114451" quat="0.677711 0.201762 -0.677711 0.201762" type="mesh" rgba="0.972549 0.529412 0.00392157 1" mesh="screwhub_v0_1_3mm"/>
-        <geom pos="-0.00300013 0.201 0.0525" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.298039 0.298039 0.298039 1" mesh="servogearbase"/>
-        <geom pos="-0.00300013 0.201 0.0525" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="servobase"/>
-        <geom pos="0.0294999 0.094 -0.046" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="platebase3_1"/>
-        <geom pos="-0.00300013 0.201 0.0525" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.827451 0.666667 0.129412 1" mesh="servogear"/>
-        <geom pos="0.0244999 0.094 -0.046" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.811765 0.858824 0.898039 1" mesh="motormountleftsmall"/>
-        <geom pos="0.0294999 0.094 -0.046" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.623529 0.666667 0.701961 1" mesh="platebase3_2"/>
-        <geom pos="0 0 0.081" quat="0 0 0.707107 0.707107" type="mesh" rgba="0.529412 0.568627 0.6 1" mesh="liftaxle2"/>
-        <geom pos="0 0 0.012" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.529412 0.568627 0.6 1" mesh="liftaxle3"/>
-        <geom pos="0.0139 0.0606 -0.0165" quat="0.5 -0.5 -0.5 0.5" type="mesh" rgba="0.713726 0.760784 0.8 1" mesh="lockpin"/>
-        <geom pos="-0.014025 0.0606 0.0845" quat="0.5 0.5 0.5 0.5" type="mesh" rgba="0.713726 0.760784 0.8 1" mesh="lockpin"/>
-        <geom pos="-0.0175 0.05 0.091" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.6 0.580392 0.529412 1" mesh="lockcap"/>
-        <geom pos="0 0 0.007" quat="0 -0.707107 0 -0.707107" type="mesh" rgba="0.529412 0.568627 0.6 1" mesh="liftaxle4"/>
-        <geom pos="0.0175 0.05 -0.023" quat="0 0 0.707107 0.707107" type="mesh" rgba="0.6 0.580392 0.529412 1" mesh="lockcap"/>
-        <geom pos="0.000890341 0.000982046 0.057" quat="0.5 -0.5 0.5 -0.5" type="mesh" rgba="0.529412 0.568627 0.6 1" mesh="liftaxle1"/>
-        <geom pos="0.0175 -0.03 -0.007" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.6 0.580392 0.529412 1" mesh="liftarmbot2"/>
-        <geom pos="-0.0456823 0.215489 0.034" quat="0.463904 -0.53366 -0.463904 -0.53366" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="camlens1"/>
-        <geom pos="-0.0456823 0.215489 0.034" quat="0.463904 -0.53366 -0.463904 -0.53366" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="camlens2"/>
-        <geom pos="-0.0456028 0.215478 0.034" quat="0.463904 -0.53366 -0.463904 -0.53366" type="mesh" rgba="0.286275 0.662745 0.329412 1" mesh="camplate"/>
-        <geom pos="0.00829987 0.24165 0.03745" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_gnd"/>
-        <geom pos="0.00169987 0.24005 0.0357" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="c_0603_1608metric001"/>
-        <geom pos="0.00579987 0.24005 0.0319" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="sot_363_sc_70_6"/>
-        <geom pos="0.00829987 0.24165 0.03235" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_sda"/>
-        <geom pos="0.00114987 0.24165 0.03815" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vl53l0x_v2"/>
-        <geom pos="0.00829987 0.24165 0.0399" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vin"/>
-        <geom pos="0.00829987 0.24165 0.02975" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_gpio1"/>
-        <geom pos="0.00829987 0.24165 0.02705" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_xshut"/>
-        <geom pos="0.00499987 0.24165 0.0243" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="troufix01"/>
-        <geom pos="0.00499987 0.24165 0.0437" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="troufix01"/>
-        <geom pos="0.00594987 0.24005 0.03515" quat="0.5 0.5 0.5 -0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="r_array_convex_4x0603"/>
-        <geom pos="0.00499987 0.24165 0.034" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="pcb_pink"/>
-        <geom pos="0.00829987 0.24165 0.03235" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_sda"/>
-        <geom pos="0.00394987 0.24005 0.02945" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="r_0603_1608metric001"/>
-        <geom pos="0.00829987 0.24165 0.03745" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_gnd"/>
-        <geom pos="0.00629987 0.24005 0.0384" quat="0.5 0.5 0.5 -0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="c_0603_1608metric"/>
-        <geom pos="0.00114987 0.24165 0.03815" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vl53l0x_v2"/>
-        <geom pos="0.00829987 0.24165 0.02705" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_xshut"/>
-        <geom pos="0.00389987 0.24005 0.0276" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="r_0603_1608metric"/>
-        <geom pos="0.00829987 0.24165 0.02705" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_xshut"/>
-        <geom pos="0.00829987 0.24165 0.02975" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_gpio1"/>
-        <geom pos="0.00829987 0.24165 0.02975" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_gpio1"/>
-        <geom pos="0.00114987 0.24165 0.03815" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vl53l0x_v2"/>
-        <geom pos="0.00829987 0.24165 0.03485" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_scl"/>
-        <geom pos="0.00829987 0.24165 0.02705" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_xshut"/>
-        <geom pos="0.00639987 0.24165 0.03175" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="vl53l0x"/>
-        <geom pos="0.00829987 0.24165 0.0399" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vin"/>
-        <geom pos="0.00114987 0.24165 0.03815" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vl53l0x_v2"/>
-        <geom pos="0.00829987 0.24165 0.03235" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_sda"/>
-        <geom pos="0.00829987 0.24165 0.02975" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_gpio1"/>
-        <geom pos="0.00829987 0.24165 0.03745" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_gnd"/>
-        <geom pos="0.00829987 0.24165 0.03485" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_scl"/>
-        <geom pos="0.00829987 0.24165 0.02705" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_xshut"/>
-        <geom pos="0.00829987 0.24165 0.0399" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vin"/>
-        <geom pos="0.00114987 0.24165 0.03815" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vl53l0x_v2"/>
-        <geom pos="0.00114987 0.24165 0.03815" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vl53l0x_v2"/>
-        <geom pos="0.00114987 0.24165 0.03815" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vl53l0x_v2"/>
-        <geom pos="0.00114987 0.24165 0.03815" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vl53l0x_v2"/>
-        <geom pos="0.00174987 0.24005 0.03385" quat="0 0 -0.707107 0.707107" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="c_0603_1608metric002"/>
-        <geom pos="0.00114987 0.24165 0.03815" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vl53l0x_v2"/>
-        <geom pos="0.00379987 0.24005 0.03885" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="sot_23"/>
-        <geom pos="0.00829987 0.24165 0.02975" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_gpio1"/>
-        <geom pos="0.00829987 0.24165 0.03485" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_scl"/>
-        <geom pos="0.00114987 0.24165 0.03815" quat="0.707107 -0.707107 0 0" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="text_vl53l0x_v2"/>
-        <geom pos="0.00547987 0.169994 0.110282" quat="0 0 0 1" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_6_x_2_5mm_lg_flat_head_screws_jis"/>
-        <geom pos="0.00547987 0.170494 0.106001" quat="0.379928 0.596368 -0.596368 -0.379928" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="worm_0_2m_x_3_25mm_od_x_1mm_id"/>
-        <geom pos="0.00972987 0.184844 0.106001" quat="0.707107 0 -0.707107 0" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___7_9mm_spacer"/>
-        <geom pos="0.00547987 0.182494 0.101201" quat="0.5 0.5 -0.5 0.5" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_right_angle_gearbox___output_shaft"/>
-        <geom pos="0.00547987 0.168494 0.106001" quat="0 0 -1 0" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_dc_motor_face_adaptor"/>
-        <geom pos="0.00253934 0.176246 0.109251" quat="0.707107 0 0 0.707107" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_23t___20_degree_pressure_angle"/>
-        <geom pos="0.00197987 0.172994 0.105801" quat="0.0226873 0 0 0.999743" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="worm_gear_0_2m_20t___1mm_id"/>
-        <geom pos="0.00547987 0.182494 0.109451" quat="0 0 0.707107 -0.707107" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___output_shaft_bushing"/>
-        <geom pos="0.00547987 0.177744 0.106026" quat="0.598325 0 0 0.801254" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_9t___20_degree_pressure_angle"/>
-        <geom pos="0.00122987 0.184844 0.106001" quat="0 0.707107 0 0.707107" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___7_9mm_spacer"/>
-        <geom pos="0.00547987 0.182494 0.105451" quat="0 -0.707107 0.707107 0" type="mesh" rgba="0.65098 0.619608 0.588235 1" mesh="gear_0_3m_21t___20_degree_pressure_angle"/>
-        <geom pos="0.00547987 0.169994 0.10172" quat="0 0 -1 0" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_6_x_2_5mm_lg_flat_head_screws_jis"/>
-        <geom pos="0.00937084 0.170494 0.103277" quat="0.693493 -0.693493 -0.138087 -0.138087" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_4_x_3mm_lg_pan_head_screws_jis"/>
-        <geom pos="0.00547987 0.182494 0.110951" quat="0.5 -0.5 0.5 -0.5" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___bottom_plate"/>
-        <geom pos="0.00547987 0.182494 0.109951" quat="0.677711 0.677711 0.201762 0.201762" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___bottom_plate_bushing"/>
-        <geom pos="0.00547987 0.182494 0.102051" quat="0.5 -0.5 0.5 -0.5" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___top_plate"/>
-        <geom pos="0.00253934 0.176246 0.106026" quat="1 0 0 0" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_10t___20_degree_pressure_angle"/>
-        <geom pos="0.00158889 0.170494 0.108726" quat="0.693493 -0.693493 -0.138087 -0.138087" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_4_x_3mm_lg_pan_head_screws_jis"/>
-        <geom pos="0.00547987 0.182494 0.102051" quat="0 0 0.707107 -0.707107" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___top_plate_bushing"/>
-        <geom pos="0.00197987 0.172994 0.106026" quat="0.67559 0 0 0.737277" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_9t___20_degree_pressure_angle"/>
-        <geom pos="0.00547987 0.177744 0.105551" quat="0 0 -1 0" type="mesh" rgba="0.65098 0.619608 0.588235 1" mesh="gear_0_3m_10t___20_degree_pressure_angle"/>
-        <geom pos="0.00547987 0.169994 -0.0422824" quat="0 -1 0 0" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_6_x_2_5mm_lg_flat_head_screws_jis"/>
-        <geom pos="0.00547987 0.170494 -0.0380012" quat="0.596368 -0.379928 0.379928 -0.596368" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="worm_0_2m_x_3_25mm_od_x_1mm_id"/>
-        <geom pos="0.00122987 0.184844 -0.0380012" quat="0.707107 0 0.707107 0" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___7_9mm_spacer"/>
-        <geom pos="0.00547987 0.182494 -0.0332012" quat="0.5 0.5 0.5 -0.5" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_right_angle_gearbox___output_shaft"/>
-        <geom pos="0.00547987 0.168494 -0.0380012" quat="1 0 0 0" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_dc_motor_face_adaptor"/>
-        <geom pos="0.00842039 0.176246 -0.0412512" quat="0 0.707107 0.707107 0" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_23t___20_degree_pressure_angle"/>
-        <geom pos="0.00897987 0.172994 -0.0378012" quat="0 0.999743 0.0226873 0" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="worm_gear_0_2m_20t___1mm_id"/>
-        <geom pos="0.00547987 0.182494 -0.0414512" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___output_shaft_bushing"/>
-        <geom pos="0.00547987 0.177744 -0.0380262" quat="0 0.801254 0.598325 0" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_9t___20_degree_pressure_angle"/>
-        <geom pos="0.00972987 0.184844 -0.0380012" quat="0 -0.707107 0 0.707107" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___7_9mm_spacer"/>
-        <geom pos="0.00547987 0.182494 -0.0374512" quat="0.707107 0 0 -0.707107" type="mesh" rgba="0.65098 0.619608 0.588235 1" mesh="gear_0_3m_21t___20_degree_pressure_angle"/>
-        <geom pos="0.00547987 0.169994 -0.0337199" quat="1 0 0 0" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_6_x_2_5mm_lg_flat_head_screws_jis"/>
-        <geom pos="0.00158889 0.170494 -0.0352767" quat="0.138087 -0.138087 0.693493 0.693493" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_4_x_3mm_lg_pan_head_screws_jis"/>
-        <geom pos="0.00547987 0.182494 -0.0429512" quat="0.5 0.5 -0.5 -0.5" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___bottom_plate"/>
-        <geom pos="0.00547987 0.182494 -0.0419512" quat="0.201762 -0.201762 -0.677711 0.677711" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___bottom_plate_bushing"/>
-        <geom pos="0.00547987 0.182494 -0.0340512" quat="0.5 0.5 -0.5 -0.5" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___top_plate"/>
-        <geom pos="0.00842039 0.176246 -0.0380262" quat="0 0 -1 0" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_10t___20_degree_pressure_angle"/>
-        <geom pos="0.00937084 0.170494 -0.0407257" quat="0.138087 -0.138087 0.693493 0.693493" type="mesh" rgba="0.752941 0.752941 0.752941 1" mesh="m1_4_x_3mm_lg_pan_head_screws_jis"/>
-        <geom pos="0.00547987 0.182494 -0.0340512" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.94902 0.760784 0.180392 1" mesh="n20_right_angle_gearbox___top_plate_bushing"/>
-        <geom pos="0.00897987 0.172994 -0.0380262" quat="0 0.737277 0.67559 0" type="mesh" rgba="0.647059 0.619608 0.588235 1" mesh="gear_0_2m_9t___20_degree_pressure_angle"/>
-        <geom pos="0.00547987 0.177744 -0.0375512" quat="1 0 0 0" type="mesh" rgba="0.65098 0.619608 0.588235 1" mesh="gear_0_3m_10t___20_degree_pressure_angle"/>
-        <geom pos="-0.0500802 0.086 0.015" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="camlens1"/>
-        <geom pos="-0.0500802 0.086 0.015" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.101961 0.101961 0.101961 1" mesh="camlens2"/>
-        <geom pos="-0.05 0.086 0.015" quat="0.5 -0.5 -0.5 -0.5" type="mesh" rgba="0.286275 0.662745 0.329412 1" mesh="camplate"/>
-        <geom pos="0.00929987 0.24165 0.04035" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="trou1"/>
-        <geom pos="0.00929987 0.24165 0.03527" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="trou1"/>
-        <geom pos="0.00929987 0.24165 0.03781" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="trou1"/>
-        <geom pos="0.00929987 0.24165 0.02765" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="trou1"/>
-        <geom pos="0.00929987 0.24165 0.03019" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="trou1"/>
-        <geom pos="0.00929987 0.24165 0.03273" quat="0.5 -0.5 0.5 0.5" type="mesh" rgba="0.596078 0.121569 0.67451 1" mesh="trou1"/>
-        <geom pos="0.00547987 0.168494 0.106001" quat="0 0 0.707107 -0.707107" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_micro_dc_motor_new"/>
-        <geom pos="0.00547987 0.168494 0.106001" quat="0 0 0.707107 -0.707107" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_micro_dc_motor_new"/>
-        <geom pos="0.00547987 0.168494 -0.0380012" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_micro_dc_motor_new"/>
-        <geom pos="0.00547987 0.168494 -0.0380012" quat="0.707107 0.707107 0 0" type="mesh" rgba="0.796078 0.823529 0.937255 1" mesh="n20_micro_dc_motor_new"/>
-        <body name="clawmtrside" pos="-0.0224601 0.201 0.0525" quat="0.5 0.5 -0.5 -0.5">
-          <inertial pos="-0.0638774 -0.00244283 -0.0133475" quat="0.499169 0.454694 0.453052 0.582089" mass="0.033623" diaginertia="4.66918e-05 4.49095e-05 3.90509e-06"/>
-          <joint name="ClawMtr" pos="0 0 0" axis="0 0 1" range="-1.0472 0"/>
-          <geom pos="0 0 -0.001" quat="0.5 0.5 0.5 -0.5" type="mesh" rgba="0.529412 0.568627 0.6 1" mesh="clawmtrside"/>
-        </body>
-        <body name="clawfollowside" pos="-0.0152101 0.201 0.0155" quat="0.5 -0.5 0.5 -0.5">
-          <inertial pos="-0.0573637 -0.00223321 0.0047072" quat="0.453901 0.505276 0.571857 0.460055" mass="0.0367707" diaginertia="5.88735e-05 5.75275e-05 3.91949e-06"/>
-          <joint name="ClawFollow" pos="0 0 0" axis="0 0 1" range="-1.0472 0"/>
-          <geom pos="0 0 -0.00269" quat="0.5 0.5 0.5 -0.5" type="mesh" rgba="0.529412 0.568627 0.6 1" mesh="clawfollowside"/>
+    <body name="BaseMount" pos="0.4 0.6 0.032">
+
+      <!-- Base joint frame stays unrotated (clean yaw about world Z) -->
+      <body name="Bot1_body">
+        <joint name="j_base"
+               type="hinge"
+               axis="0 0 1"
+               pos="0 0 0"
+               range="-3.14159265 3.14159265"/>
+
+        <!-- Rotate the visual and the entire child chain together -->
+        <body name="Bot1_chain" euler="0 1.5707963 0">
+          <geom type="mesh" mesh="Bot1"/>
+
+          <body name="MidSegment_body" pos="0 0 0" euler="0 0 3.14159265">
+            <joint name="j_mid"
+                   type="hinge"
+                   axis="0 1 0"
+                   pos="0 0 0"
+                   range="-3.14 3.14"/>
+            <geom type="mesh" mesh="MidSegment"/>
+
+            <body name="EndSegment_body"
+                  pos="0.206500 -1.323e-7 -6.113e-11"
+                  euler="1.57079632679 0 0">
+              <joint name="j_end"
+                     type="hinge"
+                     axis="0 0 -1"
+                     pos="0 0 0"
+                     range="-3.14 3.14"/>
+              <geom type="mesh" mesh="EndSegment"/>
+            </body>
+          </body>
+
         </body>
       </body>
+
     </body>
   </worldbody>
-</mujoco>
+
+  <!--
+    "Hold position + stall on collision" setup:
+    - Higher kp/kv = stiffer hold
+    - forcelimited + forcerange = torque saturation (so it stalls instead of shoving everything around forever)
+    If a joint still gets backdriven, increase its forcerange magnitude.
+  -->
+  <actuator>
+    <position joint="j_base"
+              kp="800" kv="80"
+              forcelimited="true" forcerange="-80 80"
+              ctrlrange="-3.14159265 3.14159265"/>
+
+    <position joint="j_mid"
+              kp="700" kv="70"
+              forcelimited="true" forcerange="-60 60"
+              ctrlrange="-3.14 3.14"/>
+
+    <position joint="j_end"
+              kp="600" kv="60"
+              forcelimited="true" forcerange="-40 40"
+              ctrlrange="-3.14 3.14"/>
+  </actuator>
+
+</mujocoinclude>

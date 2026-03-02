@@ -1,6 +1,12 @@
 <mujocoinclude>
   <option timestep="0.0025" iterations="50" tolerance="1e-10"
           solver="Newton" jacobian="dense" cone="elliptic"/>
+  
+  <option gravity="0 0 -9.81"
+        timestep="0.0025"
+        solver="Newton"
+        iterations="50"
+        tolerance="1e-10"/>
 
   <asset>
     <texture type="skybox" builtin="gradient"
@@ -55,9 +61,9 @@
       <geom name="table_collision"
             type="box" size="0.7 0.4 0.46" pos="0 0 -0.46"
             material="table_col" group="4"
-            contype="1" conaffinity="1" solref="0.0001 2" solimp="0.99 0.99 0.0001"/>
+            contype="1" conaffinity="1"
+            solref="0.0001 2" solimp="0.99 0.99 0.0001"/>
     </body>
-
     <geom name="floor"
           type="plane" size="14 14 .1" pos="0 0 -.913"
           material="basic_floor"

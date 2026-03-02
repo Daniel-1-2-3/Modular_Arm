@@ -9,6 +9,10 @@
     <mesh name="ClawFollowSide" file="../Meshes/ClawFollowSide.stl" scale="0.0015 0.0015 0.0015"/>
   </asset>
 
+  <visual>
+    <rgba rangefinder="0 0 0 0"/>
+  </visual>
+
   <default>
     <geom contype="1" conaffinity="1" density="700"/>
     <joint damping="30" frictionloss="2" limited="true"/>
@@ -51,7 +55,7 @@
               <body name="ClawMtrSide_body"
                     pos="0.3015 0.0329 0.081"
                     euler="1.570796325 1.570796325 3.14159265">
-                <body name="ClawMtrSide_fixed30" quat="0.9659258263 0.2588190451 0 0">
+                <body name="ClawMtrSide_fixed30" quat="0.9848077530 0.1736481777 0 0">
                   <geom type="mesh" mesh="ClawMtrSide"/>
                 </body>
               </body>
@@ -59,74 +63,22 @@
               <body name="ClawFollowSide_body"
                     pos="0.3015 0.0279 0.021"
                     euler="-1.570796325 1.570796325 3.14159265">
-                <body name="ClawFollowSide_fixed30" quat="0.9659258263 0.2588190451 0 0">
+                <body name="ClawFollowSide_fixed30" quat="0.9848077530 0.1736481777 0 0">
                   <geom type="mesh" mesh="ClawFollowSide"/>
                 </body>
               </body>
 
               <body name="ToF" pos="0.363 -0.008 0.051">
-                <geom type="sphere" size="0.005" pos="0 0 0" rgba="0 0 1 1" contype="0" conaffinity="0" density="0"/>
-                <geom type="capsule" size="0.002" fromto="0 0 0  0.30 0 0" rgba="0 0 1 0.9" contype="0" conaffinity="0" density="0"/>
+                <site name="tof_site" pos="0 0 0" quat="0.70710678 0 0.70710678 0"/>
+                <geom type="sphere" size="0.005" pos="0 0 0"
+                      contype="0" conaffinity="0" density="0"/>
               </body>
 
               <body name="CameraFOV" pos="0.331 0.072 0.051">
                 <camera name="pov_cam"
-                  pos="0 0 0"
-                  xyaxes="0 0 1  0.1391731010 0.9902680687 0"
-                  fovy="48.8"/>
-
-                <geom type="sphere" size="0.005" pos="0 0 0" rgba="1 0 0 1" contype="0" conaffinity="0" density="0"/>
-
-                <geom type="capsule" size="0.003"
-                      fromto="0.0210680  0.0062006  0.0120648   0.0185427 -0.0117676  0.0120648"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
-                <geom type="capsule" size="0.003"
-                      fromto="0.0185427 -0.0117676  0.0120648   0.0185427 -0.0117676 -0.0120648"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
-                <geom type="capsule" size="0.003"
-                      fromto="0.0185427 -0.0117676 -0.0120648   0.0210680  0.0062006 -0.0120648"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
-                <geom type="capsule" size="0.003"
-                      fromto="0.0210680  0.0062006 -0.0120648   0.0210680  0.0062006  0.0120648"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
-
-                <geom type="capsule" size="0.003"
-                      fromto="0.316020  0.0930096  0.180972   0.278141 -0.176514  0.180972"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
-                <geom type="capsule" size="0.003"
-                      fromto="0.278141 -0.176514  0.180972   0.278141 -0.176514 -0.180972"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
-                <geom type="capsule" size="0.003"
-                      fromto="0.278141 -0.176514 -0.180972   0.316020  0.0930096 -0.180972"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
-                <geom type="capsule" size="0.003"
-                      fromto="0.316020  0.0930096 -0.180972   0.316020  0.0930096  0.180972"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
-
-                <geom type="capsule" size="0.003"
-                      fromto="0.0210680  0.0062006  0.0120648   0.316020  0.0930096  0.180972"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
-                <geom type="capsule" size="0.003"
-                      fromto="0.0185427 -0.0117676  0.0120648   0.278141 -0.176514  0.180972"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
-                <geom type="capsule" size="0.003"
-                      fromto="0.0185427 -0.0117676 -0.0120648   0.278141 -0.176514 -0.180972"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
-                <geom type="capsule" size="0.003"
-                      fromto="0.0210680  0.0062006 -0.0120648   0.316020  0.0930096 -0.180972"
-                      rgba="1 0 0 0.35"
-                      contype="0" conaffinity="0" density="0"/>
+                        pos="0 0 0"
+                        xyaxes="0 0 1  0.1391731010 0.9902680687 0"
+                        fovy="48.8"/>
               </body>
 
             </body>
@@ -135,6 +87,10 @@
       </body>
     </body>
   </worldbody>
+
+  <sensor>
+    <rangefinder name="tof_range" site="tof_site"/>
+  </sensor>
 
   <actuator>
     <position joint="j_a_base"

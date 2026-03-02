@@ -59,7 +59,7 @@
     </body>
 
     <geom name="floor"
-          type="plane" size="12 12 .1" pos="0 0 -.913"
+          type="plane" size="14 14 .1" pos="0 0 -.913"
           material="basic_floor"
           contype="1" conaffinity="1" condim="3"/>
   </worldbody>

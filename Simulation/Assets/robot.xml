@@ -2,10 +2,11 @@
   <compiler angle="radian" inertiafromgeom="true"/>
 
   <asset>
-    <!-- 1.5x larger than original 0.001 -->
-    <mesh name="Bot1"       file="../Meshes/Bot1.stl"       scale="0.0015 0.0015 0.0015"/>
-    <mesh name="MidSegment" file="../Meshes/MidSegment.stl" scale="0.0015 0.0015 0.0015"/>
-    <mesh name="EndSegment" file="../Meshes/EndSegment.stl" scale="0.0015 0.0015 0.0015"/>
+    <mesh name="Bot1"           file="../Meshes/Bot1.stl"           scale="0.0015 0.0015 0.0015"/>
+    <mesh name="MidSegment"     file="../Meshes/MidSegment.stl"     scale="0.0015 0.0015 0.0015"/>
+    <mesh name="EndSegment"     file="../Meshes/EndSegment.stl"     scale="0.0015 0.0015 0.0015"/>
+    <mesh name="ClawMtrSide"    file="../Meshes/ClawMtrSide.stl"    scale="0.0015 0.0015 0.0015"/>
+    <mesh name="ClawFollowSide" file="../Meshes/ClawFollowSide.stl" scale="0.0015 0.0015 0.0015"/>
   </asset>
 
   <default>
@@ -14,15 +15,14 @@
   </default>
 
   <worldbody>
-    <!-- World placement unchanged -->
     <body name="BaseMount" pos="0.4 0.6 0.048">
-
       <body name="Bot1_body">
         <joint name="j_a_base"
                type="hinge"
                axis="0 0 1"
                pos="0 0 0"
-               range="-3.14159265 3.14159265"/>
+               limited="true"
+               range="-0.78539816339 0.78539816339"/>
 
         <body name="Bot1_chain" euler="0 1.5707963 0">
           <geom type="mesh" mesh="Bot1"/>
@@ -32,10 +32,10 @@
                    type="hinge"
                    axis="0 1 0"
                    pos="0 0 0"
-                   range="-3.14 3.14"/>
+                   limited="true"
+                   range="0 0.43633231299"/>
             <geom type="mesh" mesh="MidSegment"/>
 
-            <!-- Offset scaled by 1.5 -->
             <body name="EndSegment_body"
                   pos="0.309750 -1.9845e-7 -9.1695e-11"
                   euler="1.57079632679 0 0">
@@ -43,13 +43,95 @@
                      type="hinge"
                      axis="0 0 -1"
                      pos="0 0 0"
-                     range="-3.14 3.14"/>
-              <geom type="mesh" mesh="EndSegment"/>
-            </body>
+                     limited="true"
+                     range="-0.78539816339 1.91986217719"/>
 
+              <geom type="mesh" mesh="EndSegment"/>
+
+              <body name="ClawMtrSide_body"
+                    pos="0.3015 0.0329 0.081"
+                    euler="1.570796325 1.570796325 3.14159265">
+                <body name="ClawMtrSide_fixed30" quat="0.9659258263 0.2588190451 0 0">
+                  <geom type="mesh" mesh="ClawMtrSide"/>
+                </body>
+              </body>
+
+              <body name="ClawFollowSide_body"
+                    pos="0.3015 0.0279 0.021"
+                    euler="-1.570796325 1.570796325 3.14159265">
+                <body name="ClawFollowSide_fixed30" quat="0.9659258263 0.2588190451 0 0">
+                  <geom type="mesh" mesh="ClawFollowSide"/>
+                </body>
+              </body>
+
+              <body name="ToF" pos="0.363 -0.008 0.051">
+                <geom type="sphere" size="0.005" pos="0 0 0" rgba="0 0 1 1" contype="0" conaffinity="0" density="0"/>
+                <geom type="capsule" size="0.002" fromto="0 0 0  0.30 0 0" rgba="0 0 1 0.9" contype="0" conaffinity="0" density="0"/>
+              </body>
+
+              <body name="CameraFOV" pos="0.331 0.072 0.051">
+                <camera name="pov_cam"
+                  pos="0 0 0"
+                  xyaxes="0 0 1  0.1391731010 0.9902680687 0"
+                  fovy="48.8"/>
+
+                <geom type="sphere" size="0.005" pos="0 0 0" rgba="1 0 0 1" contype="0" conaffinity="0" density="0"/>
+
+                <geom type="capsule" size="0.003"
+                      fromto="0.0210680  0.0062006  0.0120648   0.0185427 -0.0117676  0.0120648"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+                <geom type="capsule" size="0.003"
+                      fromto="0.0185427 -0.0117676  0.0120648   0.0185427 -0.0117676 -0.0120648"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+                <geom type="capsule" size="0.003"
+                      fromto="0.0185427 -0.0117676 -0.0120648   0.0210680  0.0062006 -0.0120648"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+                <geom type="capsule" size="0.003"
+                      fromto="0.0210680  0.0062006 -0.0120648   0.0210680  0.0062006  0.0120648"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+
+                <geom type="capsule" size="0.003"
+                      fromto="0.316020  0.0930096  0.180972   0.278141 -0.176514  0.180972"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+                <geom type="capsule" size="0.003"
+                      fromto="0.278141 -0.176514  0.180972   0.278141 -0.176514 -0.180972"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+                <geom type="capsule" size="0.003"
+                      fromto="0.278141 -0.176514 -0.180972   0.316020  0.0930096 -0.180972"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+                <geom type="capsule" size="0.003"
+                      fromto="0.316020  0.0930096 -0.180972   0.316020  0.0930096  0.180972"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+
+                <geom type="capsule" size="0.003"
+                      fromto="0.0210680  0.0062006  0.0120648   0.316020  0.0930096  0.180972"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+                <geom type="capsule" size="0.003"
+                      fromto="0.0185427 -0.0117676  0.0120648   0.278141 -0.176514  0.180972"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+                <geom type="capsule" size="0.003"
+                      fromto="0.0185427 -0.0117676 -0.0120648   0.278141 -0.176514 -0.180972"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+                <geom type="capsule" size="0.003"
+                      fromto="0.0210680  0.0062006 -0.0120648   0.316020  0.0930096 -0.180972"
+                      rgba="1 0 0 0.35"
+                      contype="0" conaffinity="0" density="0"/>
+              </body>
+
+            </body>
           </body>
         </body>
-
       </body>
     </body>
   </worldbody>
@@ -58,17 +140,16 @@
     <position joint="j_a_base"
               kp="800" kv="80"
               forcelimited="true" forcerange="-80 80"
-              ctrlrange="-3.14159265 3.14159265"/>
+              ctrlrange="-0.78539816339 0.78539816339"/>
 
     <position joint="j_b_mid"
               kp="700" kv="70"
               forcelimited="true" forcerange="-60 60"
-              ctrlrange="-3.14 3.14"/>
+              ctrlrange="0 0.43633231299"/>
 
     <position joint="j_c_end"
               kp="600" kv="60"
               forcelimited="true" forcerange="-40 40"
-              ctrlrange="-3.14 3.14"/>
+              ctrlrange="-0.78539816339 1.91986217719"/>
   </actuator>
-
 </mujocoinclude>

@@ -2,12 +2,9 @@
   <include file="environment.xml"/>
   <include file="robot.xml"/>
   <worldbody>
-    <body name="mocap_target" mocap="true" pos="0.2 0.6 0.2">
-      <geom type="sphere" size="0.02" rgba="1 0 0 0.5" contype="0" conaffinity="0"/>
-    </body>
 
-    <camera name="cam0"
-        pos="-0.780 -0.615 1.1"
+    <camera name="scene_cam"
+        pos="-0.780 -0.915 1.2"
         mode="targetbody"
         target="Bot1_body"
         fovy="45"/>

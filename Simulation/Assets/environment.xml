@@ -15,7 +15,7 @@
 
     <texture name="T_table" type="cube" file="../Textures/wood2.png"/>
     <texture name="T_floor" type="2d" file="../Textures/floor2.png"/>
-    <texture name="T_wallmetal" type="cube" file="../Textures/metal.png"/>
+    <texture name="T_wallmetal" type="cube" file="../Textures/metal1.png"/>
 
     <material name="basic_floor" texture="T_floor"
               texrepeat="12 12" shininess=".3" specular="0.5" reflectance="0.2"/>
@@ -60,12 +60,13 @@
 
       <geom name="table_collision"
             type="box" size="0.7 0.4 0.46" pos="0 0 -0.46"
+            friction="0.2 0.001 0.0001"
             material="table_col" group="4"
             contype="1" conaffinity="1"
             solref="0.0001 2" solimp="0.99 0.99 0.0001"/>
     </body>
     <geom name="floor"
-          type="plane" size="14 14 .1" pos="0 0 -.913"
+          type="plane" size="8 8 .1" pos="0 0 -.913"
           material="basic_floor"
           contype="1" conaffinity="1" condim="3"/>
   </worldbody>

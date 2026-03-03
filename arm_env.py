@@ -4,6 +4,10 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 import mujoco
+import random
+from pathlib import Path
+
+from randomize_helpers import RandomizeHelpers
 
 class ArmEnv:
     def __init__(
@@ -36,32 +40,107 @@ class ArmEnv:
         if display:
             self._init_display()
 
-    def step(self, action: npt.NDArray[np.integer]): # Incremental: action +- degree to total ([-1, 0, 1])
-        if action.shape[0] != len(self.controlled_joints):
-            raise RuntimeError("Action len does not match number of joints")
+        self.last_tof_m = float("nan")
+        self.last_align_h_deg = float("nan")
+        self.last_align_v_deg = float("nan")
+        self.last_opt_v_deg = float("nan")
+        self.last_cam_cube_m = float("nan")
 
-        delta = action.astype(np.int32) * (np.pi / 180.0)
-        for i, jn in enumerate(self.controlled_joints): # Increment then clip
-            self.targets_rad[jn] += float(delta[i])
-            self.targets_rad[jn] = float(
-                np.clip(
-                    self.targets_rad[jn],
-                    self.lows[i],
-                    self.highs[i]
-                )
-            )
+        self.tof_cam_offset_m = 0.07
+        self.cam_pitch_deg = 8.0
 
-        for jn in self.controlled_joints: # Apply to actuators and step
+        self.drive_step_m = 0.01
+
+    def reset(self):
+        self._randomize()
+        self.targets_rad = {'j_a_base': 0.0, 'j_b_mid': 0.0, 'j_c_end': 105 * math.pi / 180}
+        if getattr(self, 'drive_joint', None) is not None:
+            self.targets_rad[self.drive_joint] = self._get_joint_qpos_rad(self.drive_joint)
+        for jn in self.controlled_joints:
             self.data.ctrl[self.joint_to_ctrl[jn]] = self.targets_rad[jn]
-        for _ in range(20):
+        if getattr(self, 'drive_joint', None) is not None:
+            self.data.ctrl[self.joint_to_ctrl[self.drive_joint]] = self.targets_rad[self.drive_joint]
+
+        for _ in range(50):
+            mujoco.mj_step(self.model, self.data)
+            if self.display:
+                obs = self.get_obs()
+                scene_bgr = cv2.cvtColor(obs["scene"], cv2.COLOR_RGB2BGR)
+                pov_bgr = cv2.cvtColor(obs["pov"], cv2.COLOR_RGB2BGR)
+                self._draw_hud(scene_bgr)
+                cv2.imshow(self.scene_window_name, scene_bgr)
+                cv2.imshow(self.pov_window_name, pov_bgr)
+
+    def step(self, action: npt.NDArray[np.integer]):
+        drive_dims = 1 if getattr(self, "drive_joint", None) is not None else 0
+        expected_len = len(self.controlled_joints) + drive_dims
+        if action.shape[0] != expected_len:
+            raise RuntimeError(f"Action len {action.shape[0]} does not match expected {expected_len}")
+
+        a = action.astype(np.int32)
+        if not np.all(np.isin(a, (-1, 0, 1))):
+            raise RuntimeError("All action components must be -1, 0, or 1")
+
+        arm_a = a[: len(self.controlled_joints)]
+        delta = arm_a * (np.pi / 180.0)
+        for i, jn in enumerate(self.controlled_joints):
+            self.targets_rad[jn] += float(delta[i])
+            self.targets_rad[jn] = float(np.clip(self.targets_rad[jn], self.lows[i], self.highs[i]))
+
+        if drive_dims == 1:
+            drive_a = int(a[-1])
+            self.targets_rad[self.drive_joint] += float(drive_a) * float(self.drive_step_m)
+            self.targets_rad[self.drive_joint] = float(np.clip(self.targets_rad[self.drive_joint], self.drive_low, self.drive_high))
+
+        for jn in self.controlled_joints:
+            self.data.ctrl[self.joint_to_ctrl[jn]] = self.targets_rad[jn]
+        if getattr(self, 'drive_joint', None) is not None:
+            self.data.ctrl[self.joint_to_ctrl[self.drive_joint]] = self.targets_rad[self.drive_joint]
+        for _ in range(10):
             mujoco.mj_step(self.model, self.data)
 
         obs = self.get_obs()
+        self._update_sensors_and_align()
+
         if self.display:
             scene_bgr = cv2.cvtColor(obs["scene"], cv2.COLOR_RGB2BGR)
             pov_bgr = cv2.cvtColor(obs["pov"], cv2.COLOR_RGB2BGR)
+            self._draw_hud(scene_bgr)
             cv2.imshow(self.scene_window_name, scene_bgr)
             cv2.imshow(self.pov_window_name, pov_bgr)
+
+    def _update_sensors_and_align(self, body_name: str = "red_cube") -> None:
+        sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "tof_range")
+        adr = self.model.sensor_adr[sensor_id]
+        dim = self.model.sensor_dim[sensor_id]
+        self.last_tof_m = float(self.data.sensordata[adr:adr + dim][0])
+
+        cam_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, self.pov_cam)
+        body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        mujoco.mj_forward(self.model, self.data)
+
+        cam_pos = self.data.cam_xpos[cam_id]
+        R = self.data.cam_xmat[cam_id].reshape(3, 3)
+        tgt_pos = self.data.xpos[body_id]
+        v = tgt_pos - cam_pos
+
+        self.last_cam_cube_m = float(np.linalg.norm(self.data.xpos[body_id] - self.data.cam_xpos[cam_id]))
+
+        right, down, forward = R[:, 0], R[:, 1], R[:, 2]
+        x, y, z = np.dot(v, right), np.dot(v, down), np.dot(v, forward)
+        z = abs(z)
+
+        self.last_align_h_deg = float(math.degrees(math.atan2(x, abs(z))))
+        self.last_align_v_deg = float(math.degrees(math.atan2(-y, abs(z))))
+        self.last_opt_v_deg = float(self._get_optimal_v_angle_from_z(z, h_m=self.tof_cam_offset_m, pitch_deg=self.cam_pitch_deg))
+
+    def _get_optimal_v_angle_from_z(self, z: float, h_m, pitch_deg) -> float:
+        if not np.isfinite(z) or z <= 1e-6:
+            return float("nan")
+        th = math.radians(pitch_deg)
+        num = h_m * math.cos(th) - z * math.sin(th)
+        den = h_m * math.sin(th) + z * math.cos(th)
+        return float(math.degrees(math.atan2(num, den)))
 
     def get_obs(self):
         self._gl_ctx.make_current()
@@ -84,7 +163,7 @@ class ArmEnv:
         return np.flipud(self._rgb_u8.copy())
 
     def _init_actuators(self):
-        self.joint_to_ctrl: dict[str, int] = {} # {joint_name: joint_id}
+        self.joint_to_ctrl: dict[str, int] = {}
         for act_id in range(self.model.nu):
             if int(self.model.actuator_trntype[act_id]) != int(mujoco.mjtTrn.mjTRN_JOINT):
                 continue
@@ -95,15 +174,19 @@ class ArmEnv:
 
         if not self.joint_to_ctrl:
             raise RuntimeError("No actuators found")
-        self.controlled_joints = sorted(self.joint_to_ctrl.keys()) # [] of joint nams in fixed orders
 
-        self.targets_rad = {} # {joint_name: current radian angle of the joint}
-        for joint in self.controlled_joints:
+        self.all_actuated_joints = sorted(self.joint_to_ctrl.keys())
+
+        self.drive_joint = "j_drive" if "j_drive" in self.joint_to_ctrl else None
+        self.controlled_joints = [j for j in self.all_actuated_joints if j != self.drive_joint]
+
+        self.targets_rad = {}
+        for joint in self.all_actuated_joints:
             self.targets_rad[joint] = self._get_joint_qpos_rad(joint)
             self.data.ctrl[self.joint_to_ctrl[joint]] = self.targets_rad[joint]
 
-        # Limits for each joint (j_base, j_mid, j_end)
         limits_by_name = {
+            "j_drive":  (-0.70, 0.0),
             "j_a_base": (-45 / 180 * np.pi, 45 / 180 * np.pi),
             "j_b_mid":  (0, 25 / 180 * np.pi),
             "j_c_end":  (-90 / 180 * np.pi, 110 / 180 * np.pi),
@@ -112,9 +195,9 @@ class ArmEnv:
         self.manual_limits = np.array([limits_by_name[j] for j in self.controlled_joints], dtype=np.float64)
         self.lows  = self.manual_limits[:, 0]
         self.highs = self.manual_limits[:, 1]
+        self.drive_low, self.drive_high = limits_by_name[self.drive_joint]
 
     def _init_renderer(self):
-        # Fast offscreen renderer, refrenced MetaWorld
         self._mjv_cam_scene = mujoco.MjvCamera()
         self._mjv_cam_scene.type = mujoco.mjtCamera.mjCAMERA_FIXED
 
@@ -132,7 +215,7 @@ class ArmEnv:
         self._mjv_cam_pov.fixedcamid = int(pov_cam_id)
 
         self._mjv_opt = mujoco.MjvOption()
-        self._mjv_scene = mujoco.MjvScene(self.model, maxgeom=2000) # Max objects rendered in scene
+        self._mjv_scene = mujoco.MjvScene(self.model, maxgeom=2000)
 
         if not hasattr(mujoco, "GLContext") or mujoco.GLContext is None:
             raise RuntimeError("GLContext unavailable. Set MUJOCO_GL before importing mujoco")
@@ -143,7 +226,6 @@ class ArmEnv:
         self._mjr_ctx = mujoco.MjrContext(self.model, mujoco.mjtFontScale.mjFONTSCALE_100)
         mujoco.mjr_setBuffer(mujoco.mjtFramebuffer.mjFB_OFFSCREEN, self._mjr_ctx)
 
-        # Prep for cv2 render window
         off_w = int(getattr(self._mjr_ctx, "offWidth", 640))
         off_h = int(getattr(self._mjr_ctx, "offHeight", 480))
         self.width = min(self.req_width, off_w)
@@ -162,38 +244,59 @@ class ArmEnv:
         qadr = int(self.model.jnt_qposadr[jid])
         return float(self.data.qpos[qadr])
 
+    def _randomize(self, textures_dir: str = os.path.join("Simulation", "Textures")) -> tuple[str, str]:
+        tex_dir = Path(textures_dir)
+        exts = {".jpg", ".jpeg", ".png", ".bmp"}
+        files = [p for p in tex_dir.iterdir() if p.is_file() and p.suffix.lower() in exts]
+        floor_img_path, table_img_path = random.sample(files, 2)
+
+        self._gl_ctx.make_current()
+        RandomizeHelpers._randomize_bg_textures("T_floor", str(floor_img_path), self.model, self._mjr_ctx)
+        RandomizeHelpers._randomize_bg_textures("T_table", str(table_img_path), self.model, self._mjr_ctx)
+        RandomizeHelpers._randomize_skybox_gradient(self.model, self._mjr_ctx)
+        RandomizeHelpers._randomize_target_start(self.model, self.data)
+
+        return (str(floor_img_path), str(table_img_path))
+
+    def _draw_hud(self, scene_bgr: npt.NDArray[np.uint8]):
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        scale, thickness, x0, y0, line_h = 0.55, 1, 10, 22, 20
+        color = (0, 0, 0)
+
+        tof_str = f"ToF: {self.last_tof_m:.4f} m" if np.isfinite(self.last_tof_m) else "ToF: nan"
+        h_str = f"h: {self.last_align_h_deg:.2f} deg" if np.isfinite(self.last_align_h_deg) else "h: nan"
+        v_str = f"v: {self.last_align_v_deg:.2f} deg" if np.isfinite(self.last_align_v_deg) else "v: nan"
+        vo_str = f"v*: {self.last_opt_v_deg:.2f} deg" if np.isfinite(self.last_opt_v_deg) else "v*: nan"
+        d_str = f"d_cam: {self.last_cam_cube_m:.3f} m" if np.isfinite(self.last_cam_cube_m) else "d_cam: nan"
+
+        cv2.putText(scene_bgr, tof_str, (x0, y0), font, scale, color, thickness, cv2.LINE_AA)
+        cv2.putText(scene_bgr, f"{h_str}   {v_str}", (x0, y0 + line_h), font, scale, color, thickness, cv2.LINE_AA)
+        cv2.putText(scene_bgr, f"{vo_str}   {d_str}", (x0, y0 + 2 * line_h), font, scale, color, thickness, cv2.LINE_AA)
+
 if __name__ == "__main__":
     xml_path = os.path.join("Simulation", "Assets", "scene.xml")
     arm_env = ArmEnv(xml_path=xml_path)
+    arm_env.reset()
 
-    # Confirm what joints are actually controllable (actuated) now
-    print("controlled_joints =", arm_env.controlled_joints)
+    drive_dims = 1 if getattr(arm_env, "drive_joint", None) is not None else 0
+    action_len = len(arm_env.controlled_joints) + drive_dims
 
-    # WASDRF controls the first three joints (base, mid, end) by index
-    # a/d: base -,+
-    # s/w: mid  -,+
-    # f/r: end  -,+
     keymap = {
-        ord("a"): (0, -1),
-        ord("d"): (0, +1),
-        ord("s"): (1, -1),
-        ord("w"): (1, +1),
-        ord("f"): (2, -1),
-        ord("r"): (2, +1),
+        ord("a"): (0, -1), ord("d"): (0, +1),
+        ord("s"): (1, -1), ord("w"): (1, +1),
+        ord("f"): (2, -1), ord("r"): (2, +1),
     }
+    if drive_dims:
+        keymap.update({ord("i"): (action_len - 1, 1), ord("k"): (action_len - 1, -1)})
 
     while True:
-        action = np.zeros(len(arm_env.controlled_joints), dtype=np.int32)
-
+        action = np.zeros(action_len, dtype=np.int32)
         k = cv2.waitKey(1) & 0xFF
-        if k in (ord("q"), 27):
-            break
-
+        if k in (ord("q"), 27): break
+        if k == ord("m"): arm_env._randomize()
         if k in keymap:
-            idx, delta = keymap[k]
-            if idx < action.shape[0]:
-                action[idx] = delta
-
+            i, d = keymap[k]
+            action[i] = d
         arm_env.step(action)
 
     cv2.destroyAllWindows()

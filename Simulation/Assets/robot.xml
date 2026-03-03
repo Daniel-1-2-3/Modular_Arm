@@ -19,6 +19,17 @@
   </default>
 
   <worldbody>
+    <!-- Slide joint lets the robot drive forward/backward along the X axis -->
+    <body name="BaseSlider" pos="0 0 0">
+      <joint name="j_drive"
+             type="slide"
+             axis="1 0 0"
+             pos="0 0 0"
+             limited="true"
+             range="-1.0 0.0"
+             damping="50"
+             frictionloss="2"/>
+      <inertial pos="0 0 0" mass="0.2" diaginertia="0.001 0.001 0.001"/>
     <body name="BaseMount" pos="0.4 0.6 0.048">
       <body name="Bot1_body">
         <joint name="j_a_base"
@@ -37,7 +48,7 @@
                    axis="0 1 0"
                    pos="0 0 0"
                    limited="true"
-                   range="0 0.43633231299"/>
+                   range="0 0.69813170079"/>
             <geom type="mesh" mesh="MidSegment"/>
 
             <body name="EndSegment_body"
@@ -85,7 +96,8 @@
           </body>
         </body>
       </body>
-    </body>
+    </body><!-- BaseMount -->
+    </body><!-- BaseSlider -->
   </worldbody>
 
   <sensor>
@@ -93,6 +105,11 @@
   </sensor>
 
   <actuator>
+    <position joint="j_drive"
+              kp="1200" kv="120"
+              forcelimited="true" forcerange="-120 120"
+              ctrlrange="-0.70 0.0"/>
+
     <position joint="j_a_base"
               kp="800" kv="80"
               forcelimited="true" forcerange="-80 80"

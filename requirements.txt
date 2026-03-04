@@ -4,3 +4,4 @@ opencv-python
 gymnasium
 dm_env
 pygame
+einops

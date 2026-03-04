@@ -9,8 +9,10 @@ import random
 from pathlib import Path
 from gymnasium.spaces import MultiDiscrete, Dict, Box
 from dm_env import StepType
+import torch
 
 from randomize_helpers import RandomizeHelpers
+from MAE_Model.prepare_input import Prepare
 import reward_utils
 
 class ArmEnv:
@@ -104,8 +106,13 @@ class ArmEnv:
         if getattr(self, 'drive_joint', None) is not None:
             self.data.ctrl[self.joint_to_ctrl[self.drive_joint]] = self.targets_rad[self.drive_joint]
 
-        for _ in range(50):
-            mujoco.mj_step(self.model, self.data)
+        for jn, q in self.targets_rad.items():
+            jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jn)
+            qadr = self.model.jnt_qposadr[jid]
+            self.data.qpos[qadr] = float(q)
+            self.data.qvel[self.model.jnt_dofadr[jid]] = 0.0
+
+        mujoco.mj_forward(self.model, self.data)
 
         cam_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, self.pov_cam)
         self.hand_init_pos = self.data.cam_xpos[cam_id].copy()
@@ -127,6 +134,29 @@ class ArmEnv:
             "discount": self.discount,
         }
     
+    def get_obs(self):
+        self._gl_ctx.make_current()
+
+        scene_u8 = self._render_fixedcam(self._mjv_cam_scene) # (H,W,3) uint8
+        pov_u8   = self._render_fixedcam(self._mjv_cam_pov)
+
+        scene_t = torch.from_numpy(scene_u8).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+        pov_t   = torch.from_numpy(pov_u8).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+
+        # Normalize using the same pipeline (but without fusion)
+        scene_t = Prepare.normalize(scene_t)
+        pov_t   = Prepare.normalize(pov_t)
+
+        scene_np = scene_t[0].detach().cpu().numpy().astype(np.float32, copy=False)
+        pov_np   = pov_t[0].detach().cpu().numpy().astype(np.float32, copy=False)
+
+        tof_norm = 1.0 if (not np.isfinite(self.last_tof_m) or self.last_tof_m <= 0) else float(np.clip(self.last_tof_m / 2.0, 0.0, 0.99))
+
+        return {
+            "scene": scene_np,
+            "pov": pov_np,
+            "tof": tof_norm
+        }
     def get_obs(self):
         self._gl_ctx.make_current()
         scene_rgb = self._render_fixedcam(self._mjv_cam_scene)

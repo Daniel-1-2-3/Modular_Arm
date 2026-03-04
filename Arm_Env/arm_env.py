@@ -3,11 +3,15 @@ import os, time, math, queue
 import cv2
 import numpy as np
 import numpy.typing as npt
+from typing import Any
 import mujoco
 import random
 from pathlib import Path
+from gymnasium.spaces import MultiDiscrete, Dict, Box
+from dm_env import StepType
 
 from randomize_helpers import RandomizeHelpers
+import reward_utils
 
 class ArmEnv:
     def __init__(
@@ -19,6 +23,9 @@ class ArmEnv:
         height: int = 1000,
         brace_other_joints: bool = True,
         display: bool = True,
+        discount: float = 0.99,
+        episode_horizon: int = 300,
+        
     ):
         self.xml_path = xml_path
         self.scene_cam, self.pov_cam = scene_cam, pov_cam
@@ -48,11 +55,47 @@ class ArmEnv:
 
         self.tof_cam_offset_m = 0.07
         self.cam_pitch_deg = 8.0
-
         self.drive_step_m = 0.01
+        
+        self.discount = discount
+        self.episode_horizon = episode_horizon
+        self.curr_path_length: int = 0
+        self.step_type: StepType = StepType.FIRST
+        self.hand_init_pos: np.ndarray | None = None
+        self._target_pos: np.ndarray | None = None
+        
+        self.reset()
 
-    def reset(self):
+    def get_action_space(self) -> MultiDiscrete: # Each joint has 3 choices (0=-1, 1=0, 2=+1)
+        drive_dims = 1 if getattr(self, "drive_joint", None) is not None else 0
+        n_dims = len(self.controlled_joints) + drive_dims
+        return MultiDiscrete([3] * n_dims)
+
+    def _action_from_index(self, action: np.ndarray) -> np.ndarray: #Convert MultiDiscrete indices (0,1,2) to env values (-1,0,+1)
+        return action.astype(np.int32) - 1
+
+    def get_observation_space(self) -> Dict:
+        return Dict({
+            "pov": Box(low=0, high=255, shape=(self.height, self.width, 3), dtype=np.uint8),
+            "tof": Box(low=-1.0, high=10.0, shape=(1,), dtype=np.float32),
+        })
+    
+    def evaluate_state(self) -> tuple[float, dict[str, Any]]:
+        reward, tof_dist, in_place = self._compute_reward()
+        success = float(tof_dist <= 0.05)
+        info = {
+            "success": success,
+            "tof_dist": tof_dist,
+            "in_place_reward": in_place,
+            "unscaled_reward": reward,
+        }
+        return reward, info
+
+    def reset(self) -> dict[str, Any]:
         self._randomize()
+        self.curr_path_length = 0
+        self.step_type = StepType.FIRST
+
         self.targets_rad = {'j_a_base': 0.0, 'j_b_mid': 0.0, 'j_c_end': 105 * math.pi / 180}
         if getattr(self, 'drive_joint', None) is not None:
             self.targets_rad[self.drive_joint] = self._get_joint_qpos_rad(self.drive_joint)
@@ -63,15 +106,44 @@ class ArmEnv:
 
         for _ in range(50):
             mujoco.mj_step(self.model, self.data)
-            if self.display:
-                obs = self.get_obs()
-                scene_bgr = cv2.cvtColor(obs["scene"], cv2.COLOR_RGB2BGR)
-                pov_bgr = cv2.cvtColor(obs["pov"], cv2.COLOR_RGB2BGR)
-                self._draw_hud(scene_bgr)
-                cv2.imshow(self.scene_window_name, scene_bgr)
-                cv2.imshow(self.pov_window_name, pov_bgr)
 
-    def step(self, action: npt.NDArray[np.integer]):
+        cam_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, self.pov_cam)
+        self.hand_init_pos = self.data.cam_xpos[cam_id].copy()
+        cube_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "red_cube")
+        self._target_pos = self.data.xpos[cube_id].copy()
+
+        self._update_sensors()
+        obs = self.get_obs()
+
+        if self.display:
+            self._display_obs(obs)
+
+        return {
+            "pov_obs": obs["pov"],
+            "tof_obs": obs["tof"],
+            "step_type": self.step_type,
+            "action": None,
+            "reward": None,
+            "discount": self.discount,
+        }
+    
+    def get_obs(self):
+        self._gl_ctx.make_current()
+        scene_rgb = self._render_fixedcam(self._mjv_cam_scene)
+        pov_rgb = self._render_fixedcam(self._mjv_cam_pov)
+        
+        tof_norm = 1.0 if (not np.isfinite(self.last_tof_m) or self.last_tof_m <= 0) else float(np.clip(self.last_tof_m / 2.0, 0.0, 0.99))
+        return {"scene": scene_rgb, "pov": pov_rgb, "tof": tof_norm}
+
+    def _display_obs(self, obs: dict[str, Any]) -> None:
+        scene_bgr = cv2.cvtColor(obs["scene"], cv2.COLOR_RGB2BGR)
+        pov_bgr = cv2.cvtColor(obs["pov"], cv2.COLOR_RGB2BGR)
+        self._draw_hud(scene_bgr)
+        cv2.imshow(self.scene_window_name, scene_bgr)
+        cv2.imshow(self.pov_window_name, pov_bgr)
+
+    def step(self, action: npt.NDArray[np.integer]) -> dict[str, Any]:
+        action = self._action_from_index(action)
         drive_dims = 1 if getattr(self, "drive_joint", None) is not None else 0
         expected_len = len(self.controlled_joints) + drive_dims
         if action.shape[0] != expected_len:
@@ -90,26 +162,39 @@ class ArmEnv:
         if drive_dims == 1:
             drive_a = int(a[-1])
             self.targets_rad[self.drive_joint] += float(drive_a) * float(self.drive_step_m)
-            self.targets_rad[self.drive_joint] = float(np.clip(self.targets_rad[self.drive_joint], self.drive_low, self.drive_high))
+            self.targets_rad[self.drive_joint] = float(np.clip(
+                self.targets_rad[self.drive_joint], self.drive_low, self.drive_high
+            ))
 
         for jn in self.controlled_joints:
             self.data.ctrl[self.joint_to_ctrl[jn]] = self.targets_rad[jn]
         if getattr(self, 'drive_joint', None) is not None:
             self.data.ctrl[self.joint_to_ctrl[self.drive_joint]] = self.targets_rad[self.drive_joint]
+
         for _ in range(10):
             mujoco.mj_step(self.model, self.data)
 
+        self._update_sensors()
+        self.curr_path_length += 1
         obs = self.get_obs()
-        self._update_sensors_and_align()
 
         if self.display:
-            scene_bgr = cv2.cvtColor(obs["scene"], cv2.COLOR_RGB2BGR)
-            pov_bgr = cv2.cvtColor(obs["pov"], cv2.COLOR_RGB2BGR)
-            self._draw_hud(scene_bgr)
-            cv2.imshow(self.scene_window_name, scene_bgr)
-            cv2.imshow(self.pov_window_name, pov_bgr)
+            self._display_obs(obs)
 
-    def _update_sensors_and_align(self, body_name: str = "red_cube") -> None:
+        reward, info = self.evaluate_state()
+
+        done = self.curr_path_length >= self.episode_horizon
+        self.step_type = StepType.LAST if done else StepType.MID
+
+        return {
+            "pov_obs": obs["pov"],
+            "tof_obs": obs["tof"],
+            "step_type": self.step_type,
+            "reward": reward,
+            "discount": 0.0 if done else self.discount,
+        }
+
+    def _update_sensors(self, body_name: str = "red_cube") -> None:
         sensor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "tof_range")
         adr = self.model.sensor_adr[sensor_id]
         dim = self.model.sensor_dim[sensor_id]
@@ -142,11 +227,30 @@ class ArmEnv:
         den = h_m * math.sin(th) + z * math.cos(th)
         return float(math.degrees(math.atan2(num, den)))
 
-    def get_obs(self):
-        self._gl_ctx.make_current()
-        scene_rgb = self._render_fixedcam(self._mjv_cam_scene)
-        pov_rgb = self._render_fixedcam(self._mjv_cam_pov)
-        return {"scene": scene_rgb, "pov": pov_rgb}
+    def _tof_hitting_target(self, body_name: str = "red_cube") -> bool:
+        cam_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, self.pov_cam)
+        cube_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        arm_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "EndSegment_body")
+
+        ray_origin = self.data.cam_xpos[cam_id].copy()
+        R = self.data.cam_xmat[cam_id].reshape(3, 3)
+        ray_dir = -R[:, 2] # -z for axis
+
+        geomid = np.array([-1], dtype=np.int32)
+        geomgroup = np.ones(6, dtype=np.uint8)
+
+        mujoco.mj_ray(
+            self.model, self.data,
+            ray_origin, ray_dir,
+            geomgroup, 1, arm_body_id, # Exclude the arm from ray hits
+            geomid,
+        )
+
+        if geomid[0] < 0:
+            return False
+
+        hit_body_id = self.model.geom_bodyid[geomid[0]]
+        return int(hit_body_id) == int(cube_body_id)
 
     def _render_fixedcam(self, mjv_cam: mujoco.MjvCamera) -> npt.NDArray[np.uint8]:
         mujoco.mjv_updateScene(
@@ -161,7 +265,33 @@ class ArmEnv:
         mujoco.mjr_render(self._mjr_rect, self._mjv_scene, self._mjr_ctx)
         mujoco.mjr_readPixels(self._rgb_u8, None, self._mjr_rect, self._mjr_ctx)
         return np.flipud(self._rgb_u8.copy())
+    
+    def _compute_reward(self) -> tuple[float, float, float]:
+        v_err_deg = self.last_align_v_deg - self.last_opt_v_deg  # Target is optimal angle, not 0
+        align_err_deg = math.sqrt(self.last_align_h_deg**2 + v_err_deg**2)
+        align = reward_utils.tolerance(
+            align_err_deg,
+            bounds=(0, 5.0),
+            margin=45.0,
+            sigmoid="long_tail",
+        )
 
+        # Only reward ToF distance when beam is hitting the target cube
+        TARGET_RADIUS = 0.06 # Gets full reward when 0.05 within the target
+        if self._tof_hitting_target():
+            in_place_margin = float(np.linalg.norm(self.hand_init_pos - self._target_pos))
+            in_place = reward_utils.tolerance(
+                self.last_tof_m,
+                bounds=(0, TARGET_RADIUS),
+                margin=in_place_margin,
+                sigmoid="long_tail",
+            )
+        else:
+            in_place = 0.0
+
+        reward = 10 * (0.3 * align + 0.7 * in_place)
+        return (reward, self.last_tof_m, in_place)
+        
     def _init_actuators(self):
         self.joint_to_ctrl: dict[str, int] = {}
         for act_id in range(self.model.nu):
@@ -272,31 +402,3 @@ class ArmEnv:
         cv2.putText(scene_bgr, tof_str, (x0, y0), font, scale, color, thickness, cv2.LINE_AA)
         cv2.putText(scene_bgr, f"{h_str}   {v_str}", (x0, y0 + line_h), font, scale, color, thickness, cv2.LINE_AA)
         cv2.putText(scene_bgr, f"{vo_str}   {d_str}", (x0, y0 + 2 * line_h), font, scale, color, thickness, cv2.LINE_AA)
-
-if __name__ == "__main__":
-    xml_path = os.path.join("Simulation", "Assets", "scene.xml")
-    arm_env = ArmEnv(xml_path=xml_path)
-    arm_env.reset()
-
-    drive_dims = 1 if getattr(arm_env, "drive_joint", None) is not None else 0
-    action_len = len(arm_env.controlled_joints) + drive_dims
-
-    keymap = {
-        ord("a"): (0, -1), ord("d"): (0, +1),
-        ord("s"): (1, -1), ord("w"): (1, +1),
-        ord("f"): (2, -1), ord("r"): (2, +1),
-    }
-    if drive_dims:
-        keymap.update({ord("i"): (action_len - 1, 1), ord("k"): (action_len - 1, -1)})
-
-    while True:
-        action = np.zeros(action_len, dtype=np.int32)
-        k = cv2.waitKey(1) & 0xFF
-        if k in (ord("q"), 27): break
-        if k == ord("m"): arm_env._randomize()
-        if k in keymap:
-            i, d = keymap[k]
-            action[i] = d
-        arm_env.step(action)
-
-    cv2.destroyAllWindows()

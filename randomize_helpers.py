@@ -102,7 +102,6 @@ class RandomizeHelpers:
     @staticmethod
     def _randomize_target_start(model, data) -> None:
         body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "red_cube")
-        rand_pos = [np.random.uniform(-0.50, -0.50), np.random.uniform(0.30,  0.90), np.random.uniform(0.2,  0.30)]
-        print(rand_pos)
+        rand_pos = [np.random.uniform(-0.50, -0.20), np.random.uniform(0.40,  0.80), np.random.uniform(0.02,  0.30)]
         model.body_pos[body_id] = rand_pos
         mujoco.mj_kinematics(model, data)

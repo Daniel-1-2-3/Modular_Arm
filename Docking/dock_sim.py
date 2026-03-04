@@ -105,7 +105,6 @@ class Car:
         wx, wy = self._white_dot_world()
         pygame.draw.circle(surface, (255, 255, 255), (int(wx), int(wy)), 5)
 
-
 def draw_grid(surface, W, H, spacing, color_major, color_minor):
     for x in range(0, W + 1, spacing):
         col = color_major if x % (spacing * 5) == 0 else color_minor
@@ -114,7 +113,6 @@ def draw_grid(surface, W, H, spacing, color_major, color_minor):
     for y in range(0, H + 1, spacing):
         col = color_major if y % (spacing * 5) == 0 else color_minor
         pygame.draw.line(surface, col, (0, y), (W, y), 1)
-
 
 def get_center_from_white_dot_px(car):
     wx, wy = car._white_dot_world()
@@ -131,8 +129,7 @@ def get_center_from_white_dot_px(car):
 
     return (wx - dx, wy - dy)
 
-
-def simulate_aruco_tvec(car_stationary, car_movable, px_per_cm):
+def simulate_aruco_rvec_tvec(car_stationary, car_movable, px_per_cm):
     px_per_m = px_per_cm * 100.0
 
     cam_px = np.array(car_movable._white_dot_world(), dtype=np.float64)
@@ -141,10 +138,11 @@ def simulate_aruco_tvec(car_stationary, car_movable, px_per_cm):
     cam_m = cam_px / px_per_m
     tag_m = tag_px / px_per_m
 
-    theta = car_movable.angle
+    theta_cam = car_movable.angle
+    theta_tag = car_stationary.angle
 
-    forward = np.array([math.cos(theta), math.sin(theta)], dtype=np.float64)
-    right = np.array([-math.sin(theta), math.cos(theta)], dtype=np.float64)
+    forward = np.array([math.cos(theta_cam), math.sin(theta_cam)], dtype=np.float64)
+    right = np.array([-math.sin(theta_cam), math.cos(theta_cam)], dtype=np.float64)
 
     rel = tag_m - cam_m
 
@@ -152,29 +150,10 @@ def simulate_aruco_tvec(car_stationary, car_movable, px_per_cm):
     tz = float(np.dot(forward, rel))
     ty = 0.0
 
-    return (tx, ty, tz)
+    yaw_rel = (theta_tag - theta_cam + math.pi) % (2 * math.pi) - math.pi
+    rvec = (0.0, yaw_rel, 0.0)
 
-
-def get_real_bearing_adjusted(car_stationary, car_movable, px_per_cm):
-    px_per_m = px_per_cm * 100.0
-
-    mov_center_px = np.array(get_center_from_white_dot_px(car_movable), dtype=np.float64)
-    sta_center_px = np.array(get_center_from_white_dot_px(car_stationary), dtype=np.float64)
-
-    mov_center_m = mov_center_px / px_per_m
-    sta_center_m = sta_center_px / px_per_m
-
-    theta = car_movable.angle
-    forward = np.array([math.cos(theta), math.sin(theta)], dtype=np.float64)
-    right = np.array([-math.sin(theta), math.cos(theta)], dtype=np.float64)
-
-    rel = sta_center_m - mov_center_m
-
-    tx = float(np.dot(right, rel))
-    tz = float(np.dot(forward, rel))
-
-    return math.atan2(tx, tz)
-
+    return rvec, (tx, ty, tz)
 
 def draw_bearing_visual(surface, font, origin_px, heading_rad, target_px, bearing, color):
     cx, cy = origin_px
@@ -188,15 +167,6 @@ def draw_bearing_visual(surface, font, origin_px, heading_rad, target_px, bearin
     pygame.draw.line(surface, color, (cx, cy), (tx, ty), 2)
 
     radius = 60
-    steps = 40
-    pts = []
-    for i in range(steps + 1):
-        a = heading_rad + bearing * (i / steps)
-        x = cx + math.cos(a) * radius
-        y = cy + math.sin(a) * radius
-        pts.append((x, y))
-    pygame.draw.lines(surface, color, False, pts, 2)
-
     mid_a = heading_rad + 0.5 * bearing
     lx = cx + math.cos(mid_a) * (radius + 10)
     ly = cy + math.sin(mid_a) * (radius + 10)
@@ -204,7 +174,6 @@ def draw_bearing_visual(surface, font, origin_px, heading_rad, target_px, bearin
     deg = math.degrees(bearing)
     text = font.render(f"{deg:+.1f}°", True, color)
     surface.blit(text, (int(lx), int(ly)))
-
 
 pygame.init()
 
@@ -214,12 +183,23 @@ clock = pygame.time.Clock()
 font = pygame.font.SysFont("consolas", 18)
 
 px_per_cm = 6
-
 car_static = Car("A", (300, 300), px_per_cm, 0.0, white_side=-1)
 car_move = Car("B", (600, 300), px_per_cm, math.pi, white_side=1)
-
 speed = 220
 rot_speed = math.radians(120)
+L_m = car_move.length_cm / 100.0
+
+center_to_camera_cam_m = (
+    +L_m / 2.0,
+    0.0,
+    (car_move.white_offset_cm / 100.0) * car_move.white_side,
+)
+
+tag_to_center_tag_m = (
+    -L_m / 2.0,
+    0.0,
+    -(car_static.white_offset_cm / 100.0) * car_static.white_side,
+)
 
 running = True
 while running:
@@ -247,19 +227,13 @@ while running:
     car_move.set_angular_velocity(omega)
     car_move.update(dt)
 
-    tvec = simulate_aruco_tvec(car_static, car_move, px_per_cm)
-    bearing_cam = CalcBearing.get_bearing(tvec)
-    bearing_real = get_real_bearing_adjusted(car_static, car_move, px_per_cm)
+    rvec, tvec = simulate_aruco_rvec_tvec(car_static, car_move, px_per_cm)
+
+    bearing_cam = CalcBearing.get_camera_bearing_from_tvec(tvec)
+    bearing_real = CalcBearing.get_bearing(rvec, tvec)
 
     screen.fill((244, 246, 250))
-    draw_grid(
-        screen,
-        W,
-        H,
-        spacing=24,
-        color_major=(210, 215, 225),
-        color_minor=(228, 232, 240),
-    )
+    draw_grid(screen, W, H, 24, (210, 215, 225), (228, 232, 240))
 
     car_static.draw(screen, (100, 100, 100), (235, 60, 60))
     car_move.draw(screen, (100, 100, 100), (235, 60, 60))

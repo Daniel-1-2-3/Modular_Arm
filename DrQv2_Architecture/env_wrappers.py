@@ -1,62 +1,138 @@
+from __future__ import annotations
+
 from collections import deque
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Dict as TypingDict
+
 import numpy as np
 from dm_env import StepType
+
 from Arm_Env.arm_env import ArmEnv
-class FrameStackWrapper():
-    def __init__(self, env: ArmEnv, num_frames):
+
+
+def _to_chw_float01(pov_hwc_u8: np.ndarray) -> np.ndarray:
+    """(H,W,3) uint8 -> (3,H,W) float32 in [0,1]."""
+    if pov_hwc_u8.dtype != np.uint8:
+        # Accept already-float arrays, but still enforce CHW.
+        arr = pov_hwc_u8
+        if arr.ndim == 3 and arr.shape[-1] == 3:
+            arr = np.transpose(arr, (2, 0, 1))
+        return arr.astype(np.float32, copy=False)
+    arr = pov_hwc_u8.astype(np.float32) / 255.0
+    arr = np.transpose(arr, (2, 0, 1))  # CHW
+    return arr.astype(np.float32, copy=False)
+
+
+class ContinuousActionWrapper:
+    """
+    ArmEnv expects MultiDiscrete actions encoded as indices {0,1,2} meaning {-1,0,+1}.
+    DrQv2 outputs continuous actions in [-1,1]. This wrapper quantizes continuous actions to indices.
+    """
+    def __init__(self, env: ArmEnv, deadband: float = 1.0 / 3.0):
         self._env = env
-        self._num_frames = num_frames
-        self._frames_deque = deque([], maxlen=num_frames)
-    
-    def _transform_observation(self, time_step):
-        self._frames_deque.append(time_step["observation"])
-        if len(self._frames_deque) != self._num_frames:
-            last_frame: np.ndarray = self._frames_deque[-1]
-            for i in range(self._num_frames - len(self._frames_deque)):
-                self._frames_deque.append(last_frame.copy())
-        
-        assert len(self._frames_deque) == self._num_frames
-        time_step["observation"] = np.concatenate(list(self._frames_deque), axis=2)
-        return time_step
+        self._deadband = float(deadband)
+
+        # Expose a continuous Box-like action space interface for train_pipeline.
+        n = int(self._env.get_action_space().nvec.size)
+        self.action_dim = n
+
+    def _quantize(self, a_cont: np.ndarray) -> np.ndarray:
+        a = np.asarray(a_cont, dtype=np.float32).reshape(-1)
+        if a.size != self.action_dim:
+            raise RuntimeError(f"Expected action_dim={self.action_dim}, got {a.size}")
+        out = np.empty_like(a, dtype=np.int32)
+        out[a < -self._deadband] = 0  # -1
+        out[(a >= -self._deadband) & (a <= self._deadband)] = 1  # 0
+        out[a > self._deadband] = 2  # +1
+        return out
 
     def reset(self):
-        self._frames_deque.clear()
-        return self._transform_observation(self._env.reset())
+        return self._env.reset()
 
     def step(self, action):
-        return self._transform_observation(self._env.step(action))
+        return self._env.step(self._quantize(action))
 
     def __getattr__(self, name):
         return getattr(self._env, name)
 
-class ActionRepeatWrapper:
-    def __init__(self, env: FrameStackWrapper, num_repeats):
+
+class FrameStackWrapper:
+    """
+    Stacks ONLY the POV image (single view) along channel dimension.
+
+    Input from ArmEnv:
+      info["pov_obs"]: (H,W,3) uint8 RGB
+      info["tof_obs"]: float scalar (already normalized in ArmEnv)
+    Output in info["observation"]:
+      dict:
+        "pov": (3*num_frames, H, W) float32 in [0,1]
+        "tof": (1,) float32
+    """
+    def __init__(self, env: Any, num_frames: int):
         self._env = env
-        self._num_repeats = num_repeats
+        self._num_frames = int(num_frames)
+        self._frames: deque[np.ndarray] = deque([], maxlen=self._num_frames)
+
+    def _transform(self, info: TypingDict[str, Any]) -> TypingDict[str, Any]:
+        pov_hwc = info["pov_obs"]
+        tof = info["tof_obs"]
+
+        pov_chw = _to_chw_float01(pov_hwc)
+        self._frames.append(pov_chw)
+        if len(self._frames) != self._num_frames:
+            last = self._frames[-1]
+            while len(self._frames) < self._num_frames:
+                self._frames.append(last.copy())
+
+        stacked = np.concatenate(list(self._frames), axis=0).astype(np.float32, copy=False)  # (3F,H,W)
+
+        info["observation"] = {
+            "pov": stacked,
+            "tof": np.array([tof], dtype=np.float32),
+        }
+        return info
+
+    def reset(self):
+        self._frames.clear()
+        return self._transform(self._env.reset())
+
+    def step(self, action):
+        return self._transform(self._env.step(action))
+
+    def __getattr__(self, name):
+        return getattr(self._env, name)
+
+
+class ActionRepeatWrapper:
+    def __init__(self, env: Any, num_repeats: int):
+        self._env = env
+        self._num_repeats = int(num_repeats)
 
     def step(self, action):
         reward = 0.0
         discount = 1.0
         for _ in range(self._num_repeats):
-            time_step = self._env.step(action)
-            reward += (time_step["reward"] or 0.0) * discount
-            discount *= time_step["discount"]
-            if time_step["step_type"] == StepType.LAST:
+            info = self._env.step(action)
+            reward += (info["reward"] or 0.0) * discount
+            discount *= info["discount"]
+            if info["step_type"] == StepType.LAST:
                 break
-            
-        time_step["discount"] = discount
-        time_step["reward"] = reward
-        return time_step
+        info["reward"] = reward
+        info["discount"] = discount
+        return info
+
+    def reset(self):
+        return self._env.reset()
 
     def __getattr__(self, name):
         return getattr(self._env, name)
+
 
 class ExtendedTimeStep(NamedTuple):
     step_type: Any
     reward: Any
     discount: Any
-    observation: Any
+    pov: Any
+    tof: Any
     action: Any
 
     def first(self):
@@ -71,30 +147,32 @@ class ExtendedTimeStep(NamedTuple):
     def __getitem__(self, attr):
         if isinstance(attr, str):
             return getattr(self, attr)
-        else:
-            return tuple.__getitem__(self, attr)
+        return tuple.__getitem__(self, attr)
+
 
 class ExtendedTimeStepWrapper:
-    def __init__(self, env: ActionRepeatWrapper):
+    def __init__(self, env: Any):
         self._env = env
 
     def reset(self):
-        return self._augment_info(self._env.reset())
+        return self._augment(self._env.reset(), action=None)
 
     def step(self, action):
-        # The var info is a dict containing observation, step_type, action, reward, and discount
         info = self._env.step(action)
-        return self._augment_info(info, action)
+        return self._augment(info, action=action)
 
-    def _augment_info(self, info, action=None):
+    def _augment(self, info: TypingDict[str, Any], action=None) -> ExtendedTimeStep:
         if action is None:
-            action = np.zeros(self._env.action_space.shape, dtype=self._env.action_space.dtype)
+            # Continuous action interface: zeros in [-1,1]
+            action = np.zeros((getattr(self._env, "action_dim", 0) or info.get("action_dim", 0) or 0,), dtype=np.float32)
+        obs = info["observation"]
         return ExtendedTimeStep(
-            observation=info["observation"],
             step_type=info["step_type"],
             reward=np.array([info["reward"] if info["reward"] is not None else 0.0], dtype=np.float32),
             discount=np.array([info["discount"]], dtype=np.float32),
-            action=action,
+            pov=obs["pov"].astype(np.float32, copy=False),
+            tof=obs["tof"].astype(np.float32, copy=False),
+            action=np.asarray(action, dtype=np.float32),
         )
 
     def __getattr__(self, name):

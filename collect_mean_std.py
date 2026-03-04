@@ -74,5 +74,8 @@ if __name__ == "__main__":
 
     with open("MAE_Model/rgb_stats.json", "w", encoding="utf-8") as f:
         json.dump(out, f, indent=2)
+    
+    with open("DrQv2_Architecture/rgb_stats.json", "w", encoding="utf-8") as f:
+        json.dump(out, f, indent=2)
 
     cv2.destroyAllWindows()

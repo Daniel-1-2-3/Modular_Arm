@@ -7,3 +7,4 @@ pygame
 einops
 matplotlib
 mujoco
+imageio

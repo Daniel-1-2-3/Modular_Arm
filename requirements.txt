@@ -5,3 +5,4 @@ gymnasium
 dm_env
 pygame
 einops
+matplotlib

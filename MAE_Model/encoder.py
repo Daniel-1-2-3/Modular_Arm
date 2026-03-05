@@ -7,35 +7,33 @@ import random
 
 class ViTMaskedEncoder(nn.Module):
     def __init__(self, 
-            nviews: int = 2,
-            patch_size: int = 6,
+            patch_size: int = 8,
             embed_dim: int = 768,
             in_channels: int = 3,
-            img_h_size: int = 84,
-            img_w_fused_size: int = 168,
+            img_h_size: int = 64,
+            img_w_size: int = 64,
             heads: int = 8,
             depth: int = 8,
             masking_ratio: float = 0.75,
         ):
         
         super().__init__()
-        self.nviews = nviews
         self.patch_size = patch_size
         self.embed_dim = embed_dim
         self.in_channels = in_channels
         self.img_h_size = img_h_size
-        self.img_w_fused_size = img_w_fused_size
+        self.img_w_size = img_w_size
         self.heads = heads
         self.depth = depth
         self.masking_ratio = masking_ratio
         
         with torch.no_grad():
-            each_view_w = img_w_fused_size // nviews
+            each_view_w = img_w_size
             each_view_h = img_h_size
             pe_np = PosEmbed.get_2d_sincos_pos_embed(
                 embed_dim, int(each_view_h // patch_size), int(each_view_w // patch_size)
             )
-            pe = torch.from_numpy(pe_np).repeat(nviews, 1)
+            pe = torch.from_numpy(pe_np).repeat(1, 1)
         self.register_buffer("pos_embed_all", pe, persistent=False)
         
         self.forward_conv = self.construct_conv_layers()
@@ -67,6 +65,8 @@ class ViTMaskedEncoder(nn.Module):
         x = self._to_bhwc(x)
         
         x = self.forward_early_conv(x)
+        if x.shape[1] != self.pos_embed_all.shape[0]:
+            raise ValueError(f"token n={x.shape[1]} but pos={self.pos_embed_all.shape[0]}")
         
         x = self.add_pos_embeds(x)
         mask = None
@@ -81,26 +81,20 @@ class ViTMaskedEncoder(nn.Module):
 
     def random_view_masking(self, x: torch.Tensor):
         device = x.device
-        batch, num_patches, embed_dim = x.shape
-        half = num_patches // 2
+        b, n, d = x.shape
 
-        mask_ratio = (self.masking_ratio - 0.5) / 0.5
-        num_mask = int(mask_ratio * half)
-        keep_per_half = half - num_mask
+        num_keep = int(round((1.0 - float(self.masking_ratio)) * n))
+        num_keep = max(1, min(num_keep, n))
 
-        mask_right = torch.rand(batch, device=device) > 0.5
-        scores = torch.rand(batch, half, device=device)
-        keep_left  = torch.topk(-scores, keep_per_half, dim=1).indices
-        keep_right = torch.topk(-scores, keep_per_half, dim=1).indices + half
+        scores = torch.rand(b, n, device=device)
+        keep_idx = torch.topk(-scores, k=num_keep, dim=1).indices
+        keep_idx, _ = keep_idx.sort(dim=1)
 
-        keep_idx = torch.where(mask_right.unsqueeze(1), keep_left, keep_right)
-        mask = torch.ones(batch, num_patches, device=device, dtype=torch.float32)
-        row = torch.arange(batch, device=device).unsqueeze(1)
+        mask = torch.ones(b, n, device=device, dtype=torch.float32)
+        row = torch.arange(b, device=device).unsqueeze(1)
         mask[row, keep_idx] = 0.0
 
-        gather_idx = keep_idx.unsqueeze(-1).expand(batch, keep_per_half, embed_dim)
-        x_masked = torch.gather(x, dim=1, index=gather_idx)
-
+        x_masked = torch.gather(x, 1, keep_idx.unsqueeze(-1).expand(b, num_keep, d))
         return x_masked, mask
     
     def add_pos_embeds(self, x: Tensor):
@@ -148,7 +142,7 @@ class ViTMaskedEncoder(nn.Module):
         
         batch, height, width_total, channels = x.shape
 
-        width_per_view = width_total // self.nviews
+        width_per_view = width_total
         x = torch.split(x, width_per_view, dim=2)
         x = torch.cat(x, dim=0)
         x = x.permute(0, 3, 1, 2)
@@ -157,7 +151,7 @@ class ViTMaskedEncoder(nn.Module):
         
         x = x.permute(0, 2, 3, 1)
         x = x.reshape(x.shape[0], -1, x.shape[-1])
-        x = torch.chunk(x, self.nviews, dim=0)
+        x = torch.chunk(x, 1, dim=0)
         x = torch.cat(x, dim=1)
         
         return x

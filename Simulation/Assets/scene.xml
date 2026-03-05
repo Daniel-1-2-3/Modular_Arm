@@ -13,7 +13,7 @@
         <geom name="red_cube_geom"
               type="box"
               size="0.02 0.02 0.02"
-              rgba="1 0 0 1"
+              rgba="0.8 0.8 0.8 1"
               contype="0"
               conaffinity="0"/>
       </body>

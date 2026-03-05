@@ -109,7 +109,6 @@ class DrQV2Agent:
         
         # Models
         self.mvmae = MAEModel(
-            nviews=1,
             patch_size=self.mvmae_patch_size,
             encoder_embed_dim=self.mvmae_encoder_embed_dim,
             decoder_embed_dim=self.mvmae_decoder_embed_dim,
@@ -134,7 +133,15 @@ class DrQV2Agent:
         
         # Truncating
         self.trunc = nn.Sequential(nn.Linear(self.repr_dim, feature_dim), nn.LayerNorm(feature_dim), nn.Tanh()).to(self.device)
-        
+        self.trunc_target = nn.Sequential(
+            nn.Linear(self.repr_dim, feature_dim),
+            nn.LayerNorm(feature_dim),
+            nn.Tanh()
+        ).to(self.device)
+        self.trunc_target.load_state_dict(self.trunc.state_dict())
+        for p in self.trunc_target.parameters():
+            p.requires_grad = False
+
         # Optimizers
         self.mvmae_optim = torch.optim.Adam(self.mvmae.parameters(), lr=lr) 
         self.actor_optim  = torch.optim.Adam(self.actor.parameters(), lr=lr)
@@ -151,9 +158,14 @@ class DrQV2Agent:
         self.critic.train(training)
         
     @torch.no_grad()
-    def _soft_update_critic_target(self):
+    def _soft_update_targets(self):
         tau = float(self.critic_target_tau)
+
         for p, tp in zip(self.critic.parameters(), self.critic_target.parameters()):
+            tp.data.mul_(1.0 - tau)
+            tp.data.add_(tau * p.data)
+
+        for p, tp in zip(self.trunc.parameters(), self.trunc_target.parameters()):
             tp.data.mul_(1.0 - tau)
             tp.data.add_(tau * p.data)
 
@@ -207,7 +219,7 @@ class DrQV2Agent:
         total_loss.backward()
         
         self.critic_optim.step()
-        self._soft_update_critic_target()
+        self._soft_update_targets()
         if update_mvmae:
             self.mvmae_optim.step()
 
@@ -270,7 +282,8 @@ class DrQV2Agent:
         z_trunc = self.trunc(z)
         obs_full = torch.cat([z_trunc, obs["tof"]], dim=1)
         
-        z_next_trunc = self.trunc(z_next)
+        with torch.no_grad():
+            z_next_trunc = self.trunc_target(z_next)
         obs_next_full = torch.cat([z_next_trunc, next_obs["tof"]], dim=1)
         
         metrics_c = self.update_critic(obs_full, action, reward, discount, obs_next_full, step, pov, update_mvmae)

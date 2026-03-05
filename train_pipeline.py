@@ -301,9 +301,6 @@ class Workshop:
             if not seed_until_step(self.global_step):
                 metrics = self.agent.update(self.replay_iter, self.global_step)
 
-            t1 = time.perf_counter()
-            print(f"Training step: {1/(t1 - t0):.2f} steps/sec, step {self.global_step}")
-
             time_step = self.train_env.step(action)
             episode_reward += float(time_step.reward[0])
             self.replay_storage.add(time_step)

@@ -3,29 +3,23 @@ import torch
 import einops
 import torch.nn.functional as F
 import os
-import time
-import numpy as np
-import cv2
-
+import matplotlib.pyplot as plt
 from MAE_Model.encoder import ViTMaskedEncoder
 from MAE_Model.decoder import ViTMaskedDecoder
-import matplotlib.pyplot as plt
 
 class MAEModel(nn.Module):
     def __init__(self, 
-            nviews: int = 1,
             patch_size: int = 8,
             encoder_embed_dim: int = 768,
             decoder_embed_dim: int = 512,
             encoder_heads: int = 16,
             decoder_heads: int = 16,
             in_channels: int = 3,
-            img_h_size: int = 84,
-            img_w_size: int = 84, 
+            img_h_size: int = 64,
+            img_w_size: int = 64, 
             masking_ratio: float = 0.75,
         ):
         super().__init__()
-        self.nviews = nviews
         self.patch_size = patch_size
         self.encoder_embed_dim = encoder_embed_dim
         self.decoder_embed_dim = decoder_embed_dim
@@ -35,22 +29,20 @@ class MAEModel(nn.Module):
         self.in_channels = in_channels
         self.img_h_size = img_h_size
         self.img_w_size = img_w_size
-        self.img_w_fused = self.nviews * self.img_w_size
-        self.num_patches = int((self.img_h_size * self.img_w_size) // (patch_size ** 2) * nviews)
+
+        self.num_patches = int((self.img_h_size * self.img_w_size) // (patch_size ** 2))
         
         self.encoder = ViTMaskedEncoder(
-            nviews=self.nviews,
             patch_size=self.patch_size,
             embed_dim=self.encoder_embed_dim,
             in_channels=self.in_channels,
             img_h_size=self.img_h_size,
-            img_w_fused_size=self.img_w_fused,
+            img_w_size=self.img_w_size,
             heads=self.encoder_heads,
             masking_ratio=self.masking_ratio,
             depth=8
         )
         self.decoder = ViTMaskedDecoder(
-            nviews=self.nviews,
             patch_size=self.patch_size,
             encoder_embed_dim=self.encoder_embed_dim,
             img_h_size=self.img_h_size,
@@ -64,22 +56,12 @@ class MAEModel(nn.Module):
     
     def forward(self, x: Tensor, mask_x: bool = True):
         """
-        Whole pipeline of the MV-MAE model: patchified, 
-        then passed through encoder, mask tokens added, and 
-        passed through decoder. 
-
         Args:
-            x (Tensor): Representing all the views stitched together horizontally,
-                        with a shape of (batch, height, width_total, channels)
-
+            x: single image, shape (B, H, W, C) or (B, C, H, W)
         Returns:
-            out (Tensor):   (batch, total_patches, patch_size^2 * channels) Input is masked, then
-                                    fed through the encoder, then the decoder
-            mask (Tensor):      Has shape (batch, total_num_patches), where each vector in the 
-                                last dimension is a binary mask with 0 representing unmasked, and 
-                                1 representing masked
-            z (Tensor):    (batch, total_patches, patch_size^2 * channels) This is the input to the 
-                                    actor in the pipeline. It is the input, without masking, passed through the encoder
+            out:  (B, num_patches, patch_size^2 * C)
+            mask: (B, num_patches) with 0 unmasked, 1 masked
+            z:    encoder tokens (your pipeline uses this)
         """
         x = self._to_bhwc(x)
         z, mask = self.encoder(x, mask_x)
@@ -94,30 +76,14 @@ class MAEModel(nn.Module):
         loss_per_patch = F.mse_loss(out, truth_patchified, reduction='none').mean(dim=-1)
         den = mask.sum()
         loss = (loss_per_patch * mask).sum() / (den if den > 0 else loss_per_patch.numel())
-
         return loss
     
     def render_reconstruction(self, x: Tensor):
-        """
-        Args:
-            x (Tensor): (batch, total_patches, patch_size^2 * channels)
-        """
         x = self.unpatchify(x)[0]
         mean = torch.tensor([0.51905, 0.47986, 0.48809], device=x.device).view(3, 1, 1)
         std = torch.tensor([0.17454, 0.20183, 0.19598], device=x.device).view(3, 1, 1)
         x = x * std + mean
         x = x.detach().cpu().clamp(0, 1).permute(1, 2, 0).numpy()
-        
-        base_path = "reconstructions/mvmae_recon.png"
-        directory = os.path.dirname(base_path)
-        filename, ext = os.path.splitext(os.path.basename(base_path))
-
-        os.makedirs(directory, exist_ok=True)
-        counter = 1 # Prevent overriding
-        save_path = base_path
-        while os.path.exists(save_path):
-            save_path = os.path.join(directory, f"{filename}_{counter}{ext}")
-            counter += 1
 
         plt.imshow(x)
         plt.axis("off")
@@ -125,51 +91,36 @@ class MAEModel(nn.Module):
         
     def patchify(self, x: Tensor):
         """
-        Convert the ground truth views into patches to match the format of the
-        decoder output, in order to compute loss
-
         Args:
-            x (Tensor): Representing all the views stitched together horizontally,
-                        with a shape of (batch, height, width_total, channels)
-        
+            x: single image (B, H, W, C) or (B, C, H, W)
         Returns:
-            x (Tensor): (batch, total_patches, patch_size^2 * channels)
+            (B, num_patches, patch_size^2 * C)
         """
         x = self._to_bhwc(x)
-        batch, height, w_total, in_channels = x.shape
-        assert w_total % self.nviews == 0, "Width must be divisible by number of views"
-
-        views = torch.chunk(x, self.nviews, dim=2)
-        patchified_views = [
-            einops.rearrange(v, 'b (h p1) (w p2) c -> b (h w) (p1 p2 c)', 
-                p1=self.patch_size, p2=self.patch_size) for v in views
-        ]
-
-        return torch.cat(patchified_views, dim=1)
+        # x: (B, H, W, C)
+        return einops.rearrange(
+            x, 'b (h p1) (w p2) c -> b (h w) (p1 p2 c)',
+            p1=self.patch_size, p2=self.patch_size
+        )
 
     def unpatchify(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: (B, total_patches, patch_size**2 * C)
+            x: (B, num_patches, patch_size^2 * C)
         Returns:
-            imgs: (B, C, H, W_fused) with views stitched horizontally
+            imgs: (B, C, H, W)
         """
-        _, total_patches, dim = x.shape
+        _, _, dim = x.shape
         c = dim // (self.patch_size ** 2)
 
-        patches_per_view = total_patches // self.nviews
         h = self.img_h_size // self.patch_size
         w = self.img_w_size // self.patch_size
 
-        views = torch.split(x, patches_per_view, dim=1) # Split the concatenated views
-
-        imgs = [
-            einops.rearrange(v, 'b (h w) (p1 p2 c) -> b c (h p1) (w p2)',
-                h=h, w=w, p1=self.patch_size, p2=self.patch_size, c=c)
-            for v in views
-        ]
-        
-        return torch.cat(imgs, dim=3)
+        img = einops.rearrange(
+            x, 'b (h w) (p1 p2 c) -> b c (h p1) (w p2)',
+            h=h, w=w, p1=self.patch_size, p2=self.patch_size, c=c
+        )
+        return img
 
     def _to_bhwc(self, x: Tensor) -> Tensor:
         if x.ndim != 4:

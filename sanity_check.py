@@ -17,8 +17,10 @@ if __name__ == "__main__":
     a = np.zeros(n, np.float32)
     while True:
         k = cv2.waitKey(1) & 0xFF
-        if k in (ord("q"), 27): break
-        if k == ord("m"): env._randomize()
+        if k in (ord("q"), 27):
+            break
+        if k == ord("m"): 
+            env._randomize()
         a.fill(0.0)
         if k in km:
             i, s = km[k]

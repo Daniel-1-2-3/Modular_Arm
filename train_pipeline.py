@@ -1,10 +1,10 @@
 import warnings
-warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import os
-os.environ.setdefault("MUJOCO_GL", "glfw")
-os.environ.setdefault("MUJOCO_PLATFORM", "glfw")
-os.environ.setdefault("PYOPENGL_PLATFORM", "glfw")
+os.environ["MUJOCO_GL"] = "egl"
+os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
+os.environ.pop("MUJOCO_PLATFORM", None)
 os.environ["MKL_SERVICE_FORCE_INTEL"] = "1"
 
 from pathlib import Path

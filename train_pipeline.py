@@ -308,12 +308,28 @@ class Workshop:
             episode_step += 1
             self._global_step += 1
 
-def save_agent(agent: DrQV2Agent, path="agent_weights.pt"):
+def save_agent(agent: DrQV2Agent, path="agent_weights.pt", step: int | None = None):
     torch.save({
+        "step": step,
         "mvmae": agent.mvmae.state_dict(),
+        "trunc": agent.trunc.state_dict(),
         "actor": agent.actor.state_dict(),
         "critic": agent.critic.state_dict(),
         "critic_target": agent.critic_target.state_dict(),
+        "trunc_target": agent.trunc_target.state_dict(),
+        "actor_optim": agent.actor_optim.state_dict(),
+        "critic_optim": agent.critic_optim.state_dict(),
+        "mvmae_optim": agent.mvmae_optim.state_dict(),
+        "cfg": {
+            "in_channels": agent.in_channels,
+            "img_h_size": agent.img_h_size,
+            "img_w_size": agent.img_w_size,
+            "patch_size": agent.mvmae_patch_size,
+            "feature_dim": agent.feature_dim,
+            "hidden_dim": agent.hidden_dim,
+            "masking_ratio": agent.masking_ratio,
+            "action_shape": tuple(agent.action_shape),
+        }
     }, path)
 
 def get_args():

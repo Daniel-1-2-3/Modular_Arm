@@ -129,15 +129,16 @@ class DrQV2Agent:
         self.critic = Critic(action_shape, self.feature_dim + 1, hidden_dim).to(device)
         self.critic_target = Critic(action_shape, self.feature_dim + 1, hidden_dim).to(device)
         self.critic_target.load_state_dict(self.critic.state_dict())
+        for p in self.critic_target.parameters():
+            p.requires_grad = False
         
         # Truncating
-        self.critic_trunc = nn.Sequential(nn.Linear(self.repr_dim, feature_dim), nn.LayerNorm(feature_dim), nn.Tanh()).to(self.device)
-        self.actor_trunc = nn.Sequential(nn.Linear(self.repr_dim, feature_dim), nn.LayerNorm(feature_dim), nn.Tanh()).to(self.device)
+        self.trunc = nn.Sequential(nn.Linear(self.repr_dim, feature_dim), nn.LayerNorm(feature_dim), nn.Tanh()).to(self.device)
         
         # Optimizers
         self.mvmae_optim = torch.optim.Adam(self.mvmae.parameters(), lr=lr) 
-        self.actor_optim  = torch.optim.Adam(list(self.actor.parameters())  + list(self.actor_trunc.parameters()), lr=lr)
-        self.critic_optim = torch.optim.Adam(list(self.critic.parameters()) + list(self.critic_trunc.parameters()), lr=lr)
+        self.actor_optim  = torch.optim.Adam(self.actor.parameters(), lr=lr)
+        self.critic_optim = torch.optim.Adam(list(self.critic.parameters()) + list(self.trunc.parameters()), lr=lr)
         
         self.train()
         self.critic_target.train()
@@ -148,6 +149,13 @@ class DrQV2Agent:
         self.mvmae.train(training)
         self.actor.train(training)
         self.critic.train(training)
+        
+    @torch.no_grad()
+    def _soft_update_critic_target(self):
+        tau = float(self.critic_target_tau)
+        for p, tp in zip(self.critic.parameters(), self.critic_target.parameters()):
+            tp.data.mul_(1.0 - tau)
+            tp.data.add_(tau * p.data)
 
     def act(self, obs, step, eval_mode):
         pov = torch.as_tensor(obs["pov"], device=self.device, dtype=torch.float32)
@@ -156,7 +164,7 @@ class DrQV2Agent:
         with torch.no_grad():
             z, _ = self.mvmae.encoder(pov.unsqueeze(0), mask_x=False) # (1, ..., ...)
             z_flat = z.flatten(start_dim=-2) # (1, Z)
-            z_flat_trunc = self.actor_trunc(z_flat).squeeze(0) # (z_trunc length,)
+            z_flat_trunc = self.trunc(z_flat).squeeze(0) # (z_trunc length,)
             obs_full = torch.cat([z_flat_trunc, tof], dim=-1) # (z_trunc length +1,)
 
             stddev = utils.schedule(self.stddev_schedule, step)
@@ -199,6 +207,7 @@ class DrQV2Agent:
         total_loss.backward()
         
         self.critic_optim.step()
+        self._soft_update_critic_target()
         if update_mvmae:
             self.mvmae_optim.step()
 
@@ -257,18 +266,15 @@ class DrQV2Agent:
         with torch.no_grad():
             z_next, _ = self.mvmae.encoder(next_pov, mask_x=False)
             z_next = z_next.flatten(start_dim=-2)
-            
-        z_critic_trunc = self.critic_trunc(z)
-        obs_full_critic = torch.cat([z_critic_trunc, obs["tof"]], dim=-1)
         
-        z_next_critic_trunc = self.critic_trunc(z_next)
-        obs_next_full_critic = torch.cat([z_next_critic_trunc, next_obs["tof"]], dim=-1)
+        z_trunc = self.trunc(z)
+        obs_full = torch.cat([z_trunc, obs["tof"]], dim=1)
         
-        z_actor_trunc = self.actor_trunc(z.detach())
-        obs_full_actor = torch.cat([z_actor_trunc, obs["tof"]], dim=-1)
+        z_next_trunc = self.trunc(z_next)
+        obs_next_full = torch.cat([z_next_trunc, next_obs["tof"]], dim=1)
         
-        metrics_c = self.update_critic(obs_full_critic, action, reward, discount, obs_next_full_critic, step, pov, update_mvmae)
-        metrics_a = self.update_actor(obs_full_actor, step)
+        metrics_c = self.update_critic(obs_full, action, reward, discount, obs_next_full, step, pov, update_mvmae)
+        metrics_a = self.update_actor(obs_full.detach(), step)
         
         metrics.update(metrics_c)
         metrics.update(metrics_a)

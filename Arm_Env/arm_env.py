@@ -404,51 +404,53 @@ class ArmEnv:
         if not np.isfinite(d):
             d = 10.0
 
-        d0 = float(getattr(self, "_init_cam_cube_m", d))
-        if not np.isfinite(d0) or d0 <= 1e-6:
-            d0 = max(d, 1.0)
-
-        D_GOAL = 0.06
-        approach = reward_utils.tolerance(
-            d,
-            bounds=(0.0, D_GOAL),
-            margin=d0,
-            sigmoid="long_tail",
-        )
-
         vis = 1.0 if bool(getattr(self, "last_cube_in_front", True)) else 0.0
-        approach = float(approach) * float(vis)
 
         if vis > 0.0 and np.isfinite(self.last_align_h_deg) and np.isfinite(self.last_align_v_deg) and np.isfinite(self.last_opt_v_deg):
             v_err_deg = float(self.last_align_v_deg - self.last_opt_v_deg)
             align_err_deg = float(math.sqrt(self.last_align_h_deg**2 + v_err_deg**2))
             align = reward_utils.tolerance(
                 align_err_deg,
-                bounds=(0.0, 5.0),
-                margin=45.0,
+                bounds=(0.0, 3.0),
+                margin=60.0,
                 sigmoid="long_tail",
             )
         else:
             align = 0.0
 
-        # NEW: force centering before approach pays off (soft gate)
-        align_gate = float(np.clip(align, 0.0, 1.0))
-        approach *= (0.2 + 0.8 * align_gate)
+        align_gate = float(np.clip(float(align), 0.0, 1.0))
+        gate = (0.3 + 0.7 * align_gate) * float(vis)
+
+        approach_coarse = reward_utils.tolerance(
+            d,
+            bounds=(0.0, 0.20),
+            margin=0.80,
+            sigmoid="long_tail",
+        )
+
+        approach_fine = reward_utils.tolerance(
+            d,
+            bounds=(0.0, 0.06),
+            margin=0.30,
+            sigmoid="long_tail",
+        )
+
+        approach = gate * (0.4 * float(approach_coarse) + 0.6 * float(approach_fine))
 
         hit = 1.0 if bool(getattr(self, "last_tof_hit", False)) else 0.0
-        HIT_BONUS = 1.0
-        hit_bonus = HIT_BONUS * hit
 
-        # NEW: brake near goal
-        close = float(np.clip((0.20 - d) / 0.20, 0.0, 1.0))
-        act_pen = 0.0
-        if getattr(self, "_last_action", None) is not None:
-            a = np.asarray(self._last_action, dtype=np.float32).reshape(-1)
-            act_pen = float(np.mean(a * a))
-        reward = 10.0 * (0.7 * approach + 0.30 * float(align)) + float(hit_bonus) - (0.02 + 0.20 * close) * act_pen
+        tof_close = 0.0
+        if hit > 0.0 and np.isfinite(self.last_tof_m) and self.last_tof_m > 0.0:
+            tof_close = reward_utils.tolerance(
+                float(self.last_tof_m),
+                bounds=(0.0, 0.04),
+                margin=0.20,
+                sigmoid="long_tail",
+            )
 
-        return (float(reward), d, float(approach), float(align), float(hit_bonus))
-
+        reward = 10.0 * (0.75 * approach + 0.25 * float(align)) + 1.0 * hit + 3.0 * float(tof_close)
+        return (float(reward), float(d), float(approach), float(align), float(hit))
+    
     def _init_actuators(self) -> None:
         self.joint_to_ctrl: dict[str, int] = {}
         for act_id in range(self.model.nu):

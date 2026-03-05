@@ -7,35 +7,25 @@ import random
 import traceback
 from collections import defaultdict
 from typing import Tuple
-
 from dm_env import specs
 from pathlib import Path
-
 import numpy as np
 import torch
 from torch.utils.data import IterableDataset
-
 from DrQv2_Architecture.env_wrappers import ExtendedTimeStep
-
 
 def episode_len(episode):
     # subtract 1 because the first transition is a dummy (FIRST) time step
     return next(iter(episode.values())).shape[0] - 1
 
-
 def save_episode(episode, fn: Path):
-    with io.BytesIO() as bs:
-        np.savez_compressed(bs, **episode)
-        bs.seek(0)
-        with fn.open('wb') as f:
-            f.write(bs.read())
-
+    # Faster than np.savez_compressed (avoids heavy CPU compression stalls)
+    np.savez(str(fn), **episode)
 
 def load_episode(fn: Path):
     with fn.open('rb') as f:
         episode = np.load(f)
         return {k: episode[k] for k in episode.keys()}
-
 
 class ReplayBufferStorage:
     """

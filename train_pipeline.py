@@ -176,10 +176,10 @@ class Workshop:
     def setup_replay(self):
         self.logger = Logger(self.work_dir / "Training_Results")
 
-        # pov is (C,H,W) float32 where C = 3*num_frames
+        # pov is (C,H,W) uint8 where C = 3*num_frames (normalize on GPU later)
         # tof is (1,) float32
         data_specs = (
-            specs.Array((self.in_channels, self.img_h_size, self.img_w_size), np.float32, name="pov"),
+            specs.Array((self.in_channels, self.img_h_size, self.img_w_size), np.uint8, name="pov"),
             specs.Array((1,), np.float32, name="tof"),
             specs.Array(self.action_space.shape, self.action_space.dtype, name="action"),
             specs.Array((1,), np.float32, name="reward"),

@@ -170,7 +170,11 @@ class DrQV2Agent:
             tp.data.add_(tau * p.data)
 
     def act(self, obs, step, eval_mode):
-        pov = torch.as_tensor(obs["pov"], device=self.device, dtype=torch.float32)
+        pov = torch.as_tensor(obs["pov"], device=self.device)
+        if pov.dtype == torch.uint8:
+            pov = pov.float().div_(255.0)
+        else:
+            pov = pov.float()
         tof = torch.as_tensor(obs["tof"], device=self.device, dtype=torch.float32)
 
         with torch.no_grad():
@@ -270,8 +274,17 @@ class DrQV2Agent:
         batch = next(replay_iter)
         obs, action, reward, discount, next_obs = utils.to_torch(batch, self.device)
         
-        pov = obs["pov"].float()
-        next_pov = next_obs["pov"].float()
+        pov = obs["pov"]
+        if pov.dtype == torch.uint8:
+            pov = pov.float().div_(255.0)
+        else:
+            pov = pov.float()
+
+        next_pov = next_obs["pov"]
+        if next_pov.dtype == torch.uint8:
+            next_pov = next_pov.float().div_(255.0)
+        else:
+            next_pov = next_pov.float()
 
         z, _ = self.mvmae.encoder(pov, mask_x=False)
         z = z.flatten(start_dim=-2)

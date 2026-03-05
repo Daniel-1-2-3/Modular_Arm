@@ -302,8 +302,7 @@ class Workshop:
                 metrics = self.agent.update(self.replay_iter, self.global_step)
 
             t1 = time.perf_counter()
-            if self._global_step % 500 == 0:
-                print(f"Training step: {1/(t1 - t0):.2f} steps/sec, step {self.global_step}")
+            print(f"Training step: {1/(t1 - t0):.2f} steps/sec, step {self.global_step}")
 
             time_step = self.train_env.step(action)
             episode_reward += float(time_step.reward[0])

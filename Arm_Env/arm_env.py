@@ -10,7 +10,7 @@ from gymnasium.spaces import Dict, Box
 from dm_env import StepType
 
 from randomize_helpers import RandomizeHelpers
-import reward_utils
+import Arm_Env.reward_utils as reward_utils
 
 
 class ArmEnv:

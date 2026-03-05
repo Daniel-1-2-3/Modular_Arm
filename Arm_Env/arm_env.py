@@ -1,19 +1,17 @@
-import os, time, math, queue
+import os, math, random
+from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
 import numpy.typing as npt
-from typing import Any
 import mujoco
-import random
-from pathlib import Path
-from gymnasium.spaces import MultiDiscrete, Dict, Box
+from gymnasium.spaces import Dict, Box
 from dm_env import StepType
-import torch
 
 from randomize_helpers import RandomizeHelpers
-from MAE_Model.prepare_input import Prepare
 import reward_utils
+
 
 class ArmEnv:
     def __init__(
@@ -27,7 +25,6 @@ class ArmEnv:
         display: bool = True,
         discount: float = 0.99,
         episode_horizon: int = 300,
-        
     ):
         self.xml_path = xml_path
         self.scene_cam, self.pov_cam = scene_cam, pov_cam
@@ -39,12 +36,18 @@ class ArmEnv:
             self.model = mujoco.MjModel.from_xml_path(self.xml_path)
             self.data = mujoco.MjData(self.model)
             mujoco.mj_forward(self.model, self.data)
-            print('Loaded model')
+            print("Loaded model")
         except ValueError as e:
             print(f"Failed to load XML: {e}")
             raise SystemExit(1)
 
         self._init_actuators()
+        drive_dims = 1 if getattr(self, "drive_joint", None) is not None else 0
+        self.action_dim = len(self.controlled_joints) + drive_dims
+
+        self.max_deg_per_step = 2.0 # max joint delta per step, in degs
+        self.max_drive_m_per_step = 0.01 # max drive delta per step, in meters
+
         self._init_renderer()
         if display:
             self._init_display()
@@ -57,31 +60,25 @@ class ArmEnv:
 
         self.tof_cam_offset_m = 0.07
         self.cam_pitch_deg = 8.0
-        self.drive_step_m = 0.01
-        
-        self.discount = discount
-        self.episode_horizon = episode_horizon
+
+        self.discount = float(discount)
+        self.episode_horizon = int(episode_horizon)
         self.curr_path_length: int = 0
         self.step_type: StepType = StepType.FIRST
         self.hand_init_pos: np.ndarray | None = None
         self._target_pos: np.ndarray | None = None
-        
+
         self.reset()
 
-    def get_action_space(self) -> MultiDiscrete: # Each joint has 3 choices (0=-1, 1=0, 2=+1)
-        drive_dims = 1 if getattr(self, "drive_joint", None) is not None else 0
-        n_dims = len(self.controlled_joints) + drive_dims
-        return MultiDiscrete([3] * n_dims)
-
-    def _action_from_index(self, action: np.ndarray) -> np.ndarray: #Convert MultiDiscrete indices (0,1,2) to env values (-1,0,+1)
-        return action.astype(np.int32) - 1
+    def get_action_space(self) -> Box:
+        return Box(low=-1.0, high=1.0, shape=(self.action_dim,), dtype=np.float32)
 
     def get_observation_space(self) -> Dict:
         return Dict({
             "pov": Box(low=0, high=255, shape=(self.height, self.width, 3), dtype=np.uint8),
-            "tof": Box(low=-1.0, high=10.0, shape=(1,), dtype=np.float32),
+            "tof": Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
         })
-    
+
     def evaluate_state(self) -> tuple[float, dict[str, Any]]:
         reward, tof_dist, in_place = self._compute_reward()
         success = float(tof_dist <= 0.05)
@@ -98,15 +95,15 @@ class ArmEnv:
         self.curr_path_length = 0
         self.step_type = StepType.FIRST
 
-        self.targets_rad = {'j_a_base': 0.0, 'j_b_mid': 0.0, 'j_c_end': 105 * math.pi / 180}
-        if getattr(self, 'drive_joint', None) is not None:
+        self.targets_rad = {"j_a_base": 0.0, "j_b_mid": 0.0, "j_c_end": 105 * math.pi / 180}
+        if self.drive_joint is not None:
             self.targets_rad[self.drive_joint] = self._get_joint_qpos_rad(self.drive_joint)
-        for jn in self.controlled_joints:
-            self.data.ctrl[self.joint_to_ctrl[jn]] = self.targets_rad[jn]
-        if getattr(self, 'drive_joint', None) is not None:
-            self.data.ctrl[self.joint_to_ctrl[self.drive_joint]] = self.targets_rad[self.drive_joint]
 
         for jn, q in self.targets_rad.items():
+            if jn not in self.joint_to_ctrl:
+                continue
+            self.data.ctrl[self.joint_to_ctrl[jn]] = float(q)
+
             jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jn)
             qadr = self.model.jnt_qposadr[jid]
             self.data.qpos[qadr] = float(q)
@@ -133,35 +130,18 @@ class ArmEnv:
             "reward": None,
             "discount": self.discount,
         }
-    
-    def get_obs(self):
+
+    def get_obs(self) -> dict[str, Any]:
         self._gl_ctx.make_current()
 
-        scene_u8 = self._render_fixedcam(self._mjv_cam_scene) # (H,W,3) uint8
-        scene_t = torch.from_numpy(scene_u8).permute(2, 0, 1).unsqueeze(0).float() / 255.0
-        scene_t = Prepare.normalize(scene_t)
-        scene_np = scene_t[0].detach().cpu().numpy().astype(np.float32, copy=False)
-        
-        pov_u8   = self._render_fixedcam(self._mjv_cam_pov)
-        pov_t   = torch.from_numpy(pov_u8).permute(2, 0, 1).unsqueeze(0).float() / 255.0
-        pov_t   = Prepare.normalize(pov_t)
-        pov_np   = pov_t[0].detach().cpu().numpy().astype(np.float32, copy=False)
+        scene_u8 = self._render_fixedcam(self._mjv_cam_scene)  # (H,W,3) uint8 RGB
+        pov_u8 = self._render_fixedcam(self._mjv_cam_pov)      # (H,W,3) uint8 RGB
 
-        tof_norm = 1.0 if (not np.isfinite(self.last_tof_m) or self.last_tof_m <= 0) else float(np.clip(self.last_tof_m / 2.0, 0.0, 0.99))
+        tof_norm = 1.0 if (not np.isfinite(self.last_tof_m) or self.last_tof_m <= 0) else float(
+            np.clip(self.last_tof_m / 2.0, 0.0, 0.99)
+        )
 
-        return {
-            "scene": scene_np,
-            "pov": pov_np,
-            "tof": tof_norm
-        }
-    
-    def get_obs(self):
-        self._gl_ctx.make_current()
-        scene_rgb = self._render_fixedcam(self._mjv_cam_scene)
-        pov_rgb = self._render_fixedcam(self._mjv_cam_pov)
-        
-        tof_norm = 1.0 if (not np.isfinite(self.last_tof_m) or self.last_tof_m <= 0) else float(np.clip(self.last_tof_m / 2.0, 0.0, 0.99))
-        return {"scene": scene_rgb, "pov": pov_rgb, "tof": tof_norm}
+        return {"scene": scene_u8, "pov": pov_u8, "tof": tof_norm}
 
     def _display_obs(self, obs: dict[str, Any]) -> None:
         scene_bgr = cv2.cvtColor(obs["scene"], cv2.COLOR_RGB2BGR)
@@ -170,33 +150,33 @@ class ArmEnv:
         cv2.imshow(self.scene_window_name, scene_bgr)
         cv2.imshow(self.pov_window_name, pov_bgr)
 
-    def step(self, action: npt.NDArray[np.integer]) -> dict[str, Any]:
-        action = self._action_from_index(action)
-        drive_dims = 1 if getattr(self, "drive_joint", None) is not None else 0
-        expected_len = len(self.controlled_joints) + drive_dims
-        if action.shape[0] != expected_len:
-            raise RuntimeError(f"Action len {action.shape[0]} does not match expected {expected_len}")
+    def step(self, action: npt.NDArray[np.floating]) -> dict[str, Any]:
+        a = np.asarray(action, dtype=np.float32).reshape(-1)
+        if a.size != self.action_dim:
+            raise RuntimeError(f"Action len {a.size} does not match expected {self.action_dim}")
 
-        a = action.astype(np.int32)
-        if not np.all(np.isin(a, (-1, 0, 1))):
-            raise RuntimeError("All action components must be -1, 0, or 1")
+        # Deadzone to reduce jitter
+        dead = 0.02
+        a[np.abs(a) < dead] = 0.0
+
+        drive_dims = 1 if self.drive_joint is not None else 0
 
         arm_a = a[: len(self.controlled_joints)]
-        delta = arm_a * (np.pi / 180.0)
+        delta_rad = np.deg2rad(self.max_deg_per_step) * arm_a
         for i, jn in enumerate(self.controlled_joints):
-            self.targets_rad[jn] += float(delta[i])
+            self.targets_rad[jn] += float(delta_rad[i])
             self.targets_rad[jn] = float(np.clip(self.targets_rad[jn], self.lows[i], self.highs[i]))
 
         if drive_dims == 1:
-            drive_a = int(a[-1])
-            self.targets_rad[self.drive_joint] += float(drive_a) * float(self.drive_step_m)
-            self.targets_rad[self.drive_joint] = float(np.clip(
-                self.targets_rad[self.drive_joint], self.drive_low, self.drive_high
-            ))
+            drive_a = float(a[-1])
+            self.targets_rad[self.drive_joint] += drive_a * float(self.max_drive_m_per_step)
+            self.targets_rad[self.drive_joint] = float(
+                np.clip(self.targets_rad[self.drive_joint], self.drive_low, self.drive_high)
+            )
 
         for jn in self.controlled_joints:
             self.data.ctrl[self.joint_to_ctrl[jn]] = self.targets_rad[jn]
-        if getattr(self, 'drive_joint', None) is not None:
+        if drive_dims == 1:
             self.data.ctrl[self.joint_to_ctrl[self.drive_joint]] = self.targets_rad[self.drive_joint]
 
         for _ in range(10):
@@ -237,7 +217,7 @@ class ArmEnv:
         tgt_pos = self.data.xpos[body_id]
         v = tgt_pos - cam_pos
 
-        self.last_cam_cube_m = float(np.linalg.norm(self.data.xpos[body_id] - self.data.cam_xpos[cam_id]))
+        self.last_cam_cube_m = float(np.linalg.norm(tgt_pos - cam_pos))
 
         right, down, forward = R[:, 0], R[:, 1], R[:, 2]
         x, y, z = np.dot(v, right), np.dot(v, down), np.dot(v, forward)
@@ -247,7 +227,7 @@ class ArmEnv:
         self.last_align_v_deg = float(math.degrees(math.atan2(-y, abs(z))))
         self.last_opt_v_deg = float(self._get_optimal_v_angle_from_z(z, h_m=self.tof_cam_offset_m, pitch_deg=self.cam_pitch_deg))
 
-    def _get_optimal_v_angle_from_z(self, z: float, h_m, pitch_deg) -> float:
+    def _get_optimal_v_angle_from_z(self, z: float, h_m: float, pitch_deg: float) -> float:
         if not np.isfinite(z) or z <= 1e-6:
             return float("nan")
         th = math.radians(pitch_deg)
@@ -262,7 +242,7 @@ class ArmEnv:
 
         ray_origin = self.data.cam_xpos[cam_id].copy()
         R = self.data.cam_xmat[cam_id].reshape(3, 3)
-        ray_dir = -R[:, 2] # -z for axis
+        ray_dir = -R[:, 2]
 
         geomid = np.array([-1], dtype=np.int32)
         geomgroup = np.ones(6, dtype=np.uint8)
@@ -270,7 +250,7 @@ class ArmEnv:
         mujoco.mj_ray(
             self.model, self.data,
             ray_origin, ray_dir,
-            geomgroup, 1, arm_body_id, # Exclude the arm from ray hits
+            geomgroup, 1, arm_body_id,
             geomid,
         )
 
@@ -292,10 +272,10 @@ class ArmEnv:
         )
         mujoco.mjr_render(self._mjr_rect, self._mjv_scene, self._mjr_ctx)
         mujoco.mjr_readPixels(self._rgb_u8, None, self._mjr_rect, self._mjr_ctx)
-        return np.flipud(self._rgb_u8.copy())
-    
+        return np.flipud(self._rgb_u8).copy()
+
     def _compute_reward(self) -> tuple[float, float, float]:
-        v_err_deg = self.last_align_v_deg - self.last_opt_v_deg  # Target is optimal angle, not 0
+        v_err_deg = self.last_align_v_deg - self.last_opt_v_deg
         align_err_deg = math.sqrt(self.last_align_h_deg**2 + v_err_deg**2)
         align = reward_utils.tolerance(
             align_err_deg,
@@ -304,8 +284,7 @@ class ArmEnv:
             sigmoid="long_tail",
         )
 
-        # Only reward ToF distance when beam is hitting the target cube
-        TARGET_RADIUS = 0.06 # Gets full reward when 0.05 within the target
+        TARGET_RADIUS = 0.06
         if self._tof_hitting_target():
             in_place_margin = float(np.linalg.norm(self.hand_init_pos - self._target_pos))
             in_place = reward_utils.tolerance(
@@ -319,8 +298,8 @@ class ArmEnv:
 
         reward = 10 * (0.3 * align + 0.7 * in_place)
         return (reward, self.last_tof_m, in_place)
-        
-    def _init_actuators(self):
+
+    def _init_actuators(self) -> None:
         self.joint_to_ctrl: dict[str, int] = {}
         for act_id in range(self.model.nu):
             if int(self.model.actuator_trntype[act_id]) != int(mujoco.mjtTrn.mjTRN_JOINT):
@@ -344,18 +323,20 @@ class ArmEnv:
             self.data.ctrl[self.joint_to_ctrl[joint]] = self.targets_rad[joint]
 
         limits_by_name = {
-            "j_drive":  (-0.70, 0.0),
+            "j_drive": (-0.70, 0.0),
             "j_a_base": (-45 / 180 * np.pi, 45 / 180 * np.pi),
-            "j_b_mid":  (0, 25 / 180 * np.pi),
-            "j_c_end":  (-90 / 180 * np.pi, 110 / 180 * np.pi),
+            "j_b_mid": (0, 25 / 180 * np.pi),
+            "j_c_end": (-90 / 180 * np.pi, 110 / 180 * np.pi),
         }
 
         self.manual_limits = np.array([limits_by_name[j] for j in self.controlled_joints], dtype=np.float64)
-        self.lows  = self.manual_limits[:, 0]
+        self.lows = self.manual_limits[:, 0]
         self.highs = self.manual_limits[:, 1]
-        self.drive_low, self.drive_high = limits_by_name[self.drive_joint]
 
-    def _init_renderer(self):
+        if self.drive_joint is not None:
+            self.drive_low, self.drive_high = limits_by_name[self.drive_joint]
+
+    def _init_renderer(self) -> None:
         self._mjv_cam_scene = mujoco.MjvCamera()
         self._mjv_cam_scene.type = mujoco.mjtCamera.mjCAMERA_FIXED
 
@@ -391,13 +372,13 @@ class ArmEnv:
         self._mjr_rect = mujoco.MjrRect(0, 0, self.width, self.height)
         self._rgb_u8 = np.empty((self.height, self.width, 3), dtype=np.uint8)
 
-    def _init_display(self):
+    def _init_display(self) -> None:
         self.scene_window_name = f"RGB ({self.scene_cam}) {self.width}x{self.height}"
         self.pov_window_name = f"RGB ({self.pov_cam}) {self.width}x{self.height}"
         cv2.namedWindow(self.scene_window_name, cv2.WINDOW_AUTOSIZE)
         cv2.namedWindow(self.pov_window_name, cv2.WINDOW_AUTOSIZE)
 
-    def _get_joint_qpos_rad(self, joint_name):
+    def _get_joint_qpos_rad(self, joint_name: str) -> float:
         jid = self.model.joint(joint_name).id
         qadr = int(self.model.jnt_qposadr[jid])
         return float(self.data.qpos[qadr])
@@ -416,7 +397,7 @@ class ArmEnv:
 
         return (str(floor_img_path), str(table_img_path))
 
-    def _draw_hud(self, scene_bgr: npt.NDArray[np.uint8]):
+    def _draw_hud(self, scene_bgr: npt.NDArray[np.uint8]) -> None:
         font = cv2.FONT_HERSHEY_SIMPLEX
         scale, thickness, x0, y0, line_h = 0.55, 1, 10, 22, 20
         color = (0, 0, 0)

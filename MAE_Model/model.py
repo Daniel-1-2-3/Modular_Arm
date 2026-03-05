@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 class MAEModel(nn.Module):
     def __init__(self, 
-            nviews: int = 2,
+            nviews: int = 1,
             patch_size: int = 8,
             encoder_embed_dim: int = 768,
             decoder_embed_dim: int = 512,
@@ -81,6 +81,7 @@ class MAEModel(nn.Module):
             z (Tensor):    (batch, total_patches, patch_size^2 * channels) This is the input to the 
                                     actor in the pipeline. It is the input, without masking, passed through the encoder
         """
+        x = self._to_bhwc(x)
         z, mask = self.encoder(x, mask_x)
         out = self.decoder(z, mask)
         out = self.out_proj(out)
@@ -134,12 +135,12 @@ class MAEModel(nn.Module):
         Returns:
             x (Tensor): (batch, total_patches, patch_size^2 * channels)
         """
+        x = self._to_bhwc(x)
         batch, height, w_total, in_channels = x.shape
         assert w_total % self.nviews == 0, "Width must be divisible by number of views"
 
-        # Split along width into views into (b, h, w, c) x nviews
-        views = torch.chunk(x, self.nviews, dim=2)  # List of [b, h, w, c]
-        patchified_views = [ # Rearrange
+        views = torch.chunk(x, self.nviews, dim=2)
+        patchified_views = [
             einops.rearrange(v, 'b (h p1) (w p2) c -> b (h w) (p1 p2 c)', 
                 p1=self.patch_size, p2=self.patch_size) for v in views
         ]
@@ -169,3 +170,14 @@ class MAEModel(nn.Module):
         ]
         
         return torch.cat(imgs, dim=3)
+
+    def _to_bhwc(self, x: Tensor) -> Tensor:
+        if x.ndim != 4:
+            return x
+        if x.shape[-1] == self.in_channels:
+            return x
+        if x.shape[1] == self.in_channels:
+            return x.permute(0, 2, 3, 1).contiguous()
+        if x.shape[2] == self.in_channels:
+            return x.permute(0, 1, 3, 2).contiguous()
+        return x

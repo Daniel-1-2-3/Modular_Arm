@@ -1,7 +1,7 @@
 import json
 import torch
 class Prepare:
-    def __init__(self, stats_path="rgb_stats.json"):
+    def __init__(self, stats_path="MAE_model/rgb_stats.json"):
         with open(stats_path, "r") as f:
             data = json.load(f)
         self.mean = torch.tensor(data["mean_rgb"], dtype=torch.float32).view(1, 3, 1, 1)

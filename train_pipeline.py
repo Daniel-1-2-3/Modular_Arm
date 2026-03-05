@@ -22,7 +22,6 @@ from DrQv2_Architecture.video import VideoRecorder
 from DrQv2_Architecture.drqv2 import DrQV2Agent
 
 from DrQv2_Architecture.env_wrappers import (
-    ContinuousActionWrapper,
     FrameStackWrapper,
     ActionRepeatWrapper,
     ExtendedTimeStepWrapper,
@@ -169,7 +168,6 @@ class Workshop:
             discount=self.discount,
             episode_horizon=self.episode_horizon,
         )
-        env = ContinuousActionWrapper(env) # continuous to discrete
         env = FrameStackWrapper(env, num_frames=self.num_frames)
         env = ActionRepeatWrapper(env, num_repeats=self.action_repeat)
         env = ExtendedTimeStepWrapper(env)
@@ -188,9 +186,9 @@ class Workshop:
             specs.Array((1,), np.float32, name="discount"),
         )
 
-        self.replay_storage = ReplayBufferStorage(data_specs, self.work_dir / 'buffer')
+        self.replay_storage = ReplayBufferStorage(data_specs, self.work_dir / 'Buffer')
         self.replay_loader = make_replay_loader(
-            self.work_dir / 'buffer',
+            self.work_dir / 'Buffer',
             self.buffer_size,
             self.batch_size,
             num_workers=4,
@@ -242,11 +240,11 @@ class Workshop:
                 ep_len += 1
 
             self.logger.log(
-                self.global_frame,
+                self.global_step,
+                frame=self.global_frame,
                 eval_episode=episode,
                 eval_episode_reward=ep_reward,
                 eval_episode_length=ep_len * self.action_repeat,
-                step=self.global_step,
                 episode=self.global_episode,
             )
 
@@ -254,10 +252,10 @@ class Workshop:
             self.video_recorder.save(f'{self.global_frame}.mp4')
 
         self.logger.log(
-            self.global_frame,
+            self.global_step,
+            frame=self.global_frame,
             eval_episode_reward_mean=(total_reward / episode),
             eval_episode_length_mean=(step * self.action_repeat / episode),
-            step=self.global_step,
             episode=self.global_episode,
         )
 
@@ -278,14 +276,14 @@ class Workshop:
                     elapsed_time, total_time = self.timer.reset()
                     episode_frame = episode_step * self.action_repeat
                     self.logger.log(
-                        self.global_frame,
+                        self.global_step,
+                        frame=self.global_frame,
                         fps=(episode_frame / elapsed_time),
                         total_time=total_time,
                         episode_reward=episode_reward,
                         episode_length=episode_frame,
                         episode=self.global_episode,
                         buffer_size=len(self.replay_storage),
-                        step=self.global_step,
                     )
 
                 time_step = self.train_env.reset()
@@ -304,7 +302,8 @@ class Workshop:
                 metrics = self.agent.update(self.replay_iter, self.global_step)
 
             t1 = time.perf_counter()
-            print(f"Training step: {1/(t1 - t0):.2f} steps/sec, step {self.global_step}")
+            if self._global_step % 500 == 0:
+                print(f"Training step: {1/(t1 - t0):.2f} steps/sec, step {self.global_step}")
 
             time_step = self.train_env.step(action)
             episode_reward += float(time_step.reward[0])
@@ -338,7 +337,7 @@ def get_args():
     parser.add_argument("--stddev_clip", type=float, default=0.3)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--discount", type=float, default=0.99)
-    parser.add_argument("--action_repeat", type=int, default=2)
+    parser.add_argument("--action_repeat", type=int, default=1)
     parser.add_argument("--mvmae_patch_size", type=int, default=8)
     parser.add_argument("--mvmae_encoder_embed_dim", type=int, default=256)
     parser.add_argument("--mvmae_decoder_embed_dim", type=int, default=128)

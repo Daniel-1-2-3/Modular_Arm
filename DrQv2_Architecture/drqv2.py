@@ -109,6 +109,7 @@ class DrQV2Agent:
         
         # Models
         self.mvmae = MAEModel(
+            nviews=1,
             patch_size=self.mvmae_patch_size,
             encoder_embed_dim=self.mvmae_encoder_embed_dim,
             decoder_embed_dim=self.mvmae_decoder_embed_dim,
@@ -148,25 +149,27 @@ class DrQV2Agent:
         self.actor.train(training)
         self.critic.train(training)
 
-    # Samples an action
     def act(self, obs, step, eval_mode):
         pov = torch.as_tensor(obs["pov"], device=self.device, dtype=torch.float32)
         tof = torch.as_tensor(obs["tof"], device=self.device, dtype=torch.float32)
+
         with torch.no_grad():
-            z, _ = self.mvmae.encoder(pov.unsqueeze(0), mask_x=False)
-            z_flat = z.flatten(start_dim=-2)
-            z_flat_trunc = self.actor_trunc(z_flat)
-            obs_full = torch.cat([z_flat_trunc, tof], dim=-1)
+            z, _ = self.mvmae.encoder(pov.unsqueeze(0), mask_x=False) # (1, ..., ...)
+            z_flat = z.flatten(start_dim=-2) # (1, Z)
+            z_flat_trunc = self.actor_trunc(z_flat).squeeze(0) # (z_trunc length,)
+            obs_full = torch.cat([z_flat_trunc, tof], dim=-1) # (z_trunc length +1,)
 
             stddev = utils.schedule(self.stddev_schedule, step)
             dist = self.actor(obs_full, stddev)
+
             if eval_mode:
                 action = dist.mean
             else:
                 action = dist.sample(clip=None)
                 if step < self.num_expl_steps:
                     action.uniform_(-1.0, 1.0)
-        return action.cpu().numpy()[0]
+
+        return action.cpu().numpy()
     
     def update_critic(self, obs, action, reward, discount, obs_next, step, img, update_mvmae: bool):
         metrics = dict()

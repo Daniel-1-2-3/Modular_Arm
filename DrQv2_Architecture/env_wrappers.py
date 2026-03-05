@@ -21,40 +21,6 @@ def _to_chw_float01(pov_hwc_u8: np.ndarray) -> np.ndarray:
     arr = np.transpose(arr, (2, 0, 1))  # CHW
     return arr.astype(np.float32, copy=False)
 
-
-class ContinuousActionWrapper:
-    """
-    ArmEnv expects MultiDiscrete actions encoded as indices {0,1,2} meaning {-1,0,+1}.
-    DrQv2 outputs continuous actions in [-1,1]. This wrapper quantizes continuous actions to indices.
-    """
-    def __init__(self, env: ArmEnv, deadband: float = 1.0 / 3.0):
-        self._env = env
-        self._deadband = float(deadband)
-
-        # Expose a continuous Box-like action space interface for train_pipeline.
-        n = int(self._env.get_action_space().nvec.size)
-        self.action_dim = n
-
-    def _quantize(self, a_cont: np.ndarray) -> np.ndarray:
-        a = np.asarray(a_cont, dtype=np.float32).reshape(-1)
-        if a.size != self.action_dim:
-            raise RuntimeError(f"Expected action_dim={self.action_dim}, got {a.size}")
-        out = np.empty_like(a, dtype=np.int32)
-        out[a < -self._deadband] = 0  # -1
-        out[(a >= -self._deadband) & (a <= self._deadband)] = 1  # 0
-        out[a > self._deadband] = 2  # +1
-        return out
-
-    def reset(self):
-        return self._env.reset()
-
-    def step(self, action):
-        return self._env.step(self._quantize(action))
-
-    def __getattr__(self, name):
-        return getattr(self._env, name)
-
-
 class FrameStackWrapper:
     """
     Stacks ONLY the POV image (single view) along channel dimension.

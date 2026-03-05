@@ -400,17 +400,6 @@ class ArmEnv:
             return np.flipud(self._rgb_u8).copy()
 
     def _compute_reward(self) -> tuple[float, float, float, float, float]:
-        """
-        Reward for single wrist camera + ToF:
-
-        - approach: privileged sim-only camera-to-cube distance shaping
-        - align: camera-frame angular alignment (only when cube is in front of camera)
-        - hit_bonus: small bonus when ToF ray actually hits cube
-        - action penalty: reduces wobble
-
-        Returns: (reward, cam_cube_m, approach, align, hit_bonus)
-        """
-        # Approach shaping (privileged distance, but gated by visibility to avoid "approach from behind" shortcut)
         d = float(self.last_cam_cube_m)
         if not np.isfinite(d):
             d = 10.0
@@ -427,11 +416,9 @@ class ArmEnv:
             sigmoid="long_tail",
         )
 
-        # Visibility gate: if cube is behind the camera, don't reward "getting closer behind you"
         vis = 1.0 if bool(getattr(self, "last_cube_in_front", True)) else 0.0
         approach = float(approach) * float(vis)
 
-        # Alignment shaping (only when visible)
         if vis > 0.0 and np.isfinite(self.last_align_h_deg) and np.isfinite(self.last_align_v_deg) and np.isfinite(self.last_opt_v_deg):
             v_err_deg = float(self.last_align_v_deg - self.last_opt_v_deg)
             align_err_deg = float(math.sqrt(self.last_align_h_deg**2 + v_err_deg**2))
@@ -444,12 +431,22 @@ class ArmEnv:
         else:
             align = 0.0
 
-        # ToF confirmation bonus (only forward ray; cached in last_tof_hit)
+        # NEW: force centering before approach pays off (soft gate)
+        align_gate = float(np.clip(align, 0.0, 1.0))
+        approach *= (0.2 + 0.8 * align_gate)
+
         hit = 1.0 if bool(getattr(self, "last_tof_hit", False)) else 0.0
-        HIT_BONUS = 0.25
+        HIT_BONUS = 1.0
         hit_bonus = HIT_BONUS * hit
 
-        reward = 10.0 * (0.75 * approach + 0.25 * float(align)) + float(hit_bonus)
+        # NEW: brake near goal
+        close = float(np.clip((0.20 - d) / 0.20, 0.0, 1.0))
+        act_pen = 0.0
+        if getattr(self, "_last_action", None) is not None:
+            a = np.asarray(self._last_action, dtype=np.float32).reshape(-1)
+            act_pen = float(np.mean(a * a))
+        reward = 10.0 * (0.7 * approach + 0.30 * float(align)) + float(hit_bonus) - (0.02 + 0.20 * close) * act_pen
+
         return (float(reward), d, float(approach), float(align), float(hit_bonus))
 
     def _init_actuators(self) -> None:

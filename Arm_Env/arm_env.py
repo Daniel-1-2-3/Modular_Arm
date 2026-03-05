@@ -9,7 +9,7 @@ import mujoco
 from gymnasium.spaces import Dict, Box
 from dm_env import StepType
 
-from randomize_helpers import RandomizeHelpers
+from Arm_Env.randomize_helpers import RandomizeHelpers
 import Arm_Env.reward_utils as reward_utils
 
 
@@ -97,7 +97,7 @@ class ArmEnv:
 
         self.targets_rad = {"j_a_base": 0.0, "j_b_mid": 0.0, "j_c_end": 105 * math.pi / 180}
         if self.drive_joint is not None:
-            self.targets_rad[self.drive_joint] = self._get_joint_qpos_rad(self.drive_joint)
+            self.targets_rad[self.drive_joint] = 0.0
 
         for jn, q in self.targets_rad.items():
             if jn not in self.joint_to_ctrl:

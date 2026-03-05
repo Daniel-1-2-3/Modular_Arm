@@ -11,7 +11,8 @@ if __name__ == "__main__":
           ord("w"):(1,1),
           ord("f"):(2,-1),
           ord("r"):(2,1)}
-    if drive: km.update({ord("i"):(n-1,1), ord("k"):(n-1,-1)})
+    if drive: 
+        km.update({ord("i"):(n-1,1), ord("k"):(n-1,-1)})
 
     a = np.zeros(n, np.float32)
     while True:

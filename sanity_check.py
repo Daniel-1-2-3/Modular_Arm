@@ -5,7 +5,12 @@ if __name__ == "__main__":
     env = ArmEnv(xml_path=os.path.join("Simulation", "Assets", "scene.xml"))
     drive = 1 if getattr(env, "drive_joint", None) is not None else 0
     n = len(env.controlled_joints) + drive
-    km = {ord("a"):(0,-1),ord("d"):(0,1),ord("s"):(1,-1),ord("w"):(1,1),ord("f"):(2,-1),ord("r"):(2,1)}
+    km = {ord("a"):(0,-1),
+          ord("d"):(0,1),
+          ord("s"):(1,-1),
+          ord("w"):(1,1),
+          ord("f"):(2,-1),
+          ord("r"):(2,1)}
     if drive: km.update({ord("i"):(n-1,1), ord("k"):(n-1,-1)})
 
     a = np.zeros(n, np.float32)

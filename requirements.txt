@@ -1,10 +1,11 @@
 torch
 numpy
-opencv-python
-gymnasium
-dm_env
-pygame
 einops
-matplotlib
+timm
+gymnasium
+dm-env
 mujoco
+opencv-python
 imageio
+imageio-ffmpeg
+matplotlib

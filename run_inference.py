@@ -2,11 +2,12 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import os
-# CPU-friendly rendering:
 os.environ["MUJOCO_GL"] = os.environ.get("MUJOCO_GL", "glfw")
 os.environ["PYOPENGL_PLATFORM"] = os.environ.get("PYOPENGL_PLATFORM", "glfw")
 os.environ.pop("MUJOCO_PLATFORM", None)
 
+import math
+import argparse
 from collections import deque
 from pathlib import Path
 
@@ -14,238 +15,239 @@ import cv2
 import numpy as np
 import torch
 
-from Arm_Env.arm_env import ArmEnv
-from DrQv2_Architecture.drqv2 import DrQV2Agent
+from MAE_Model.model import MAEModel
+import DrQv2_Architecture.utils as utils
+from DrQv2_Architecture.drqv2 import DrQV2Agent, Actor, Critic
 
 
 class Control:
-    """
-    - Env renders at display resolution (big windows)
-    - Policy always receives 64x64 stacked POV only
-    """
-
     def __init__(
         self,
-        weights_path: str = "Results/Iteration3/agent_weights.pt",
-        device: str | None = None,
+        checkpoint_path: str | Path,
+        device: str | torch.device | None = None,
         num_frames: int = 3,
-        policy_hw: int = 64,
-
-        # Fallback defaults (used only if cfg is missing in checkpoint)
-        mvmae_patch_size: int = 8,
-        mvmae_encoder_embed_dim: int = 256,
-        mvmae_decoder_embed_dim: int = 128,
-        mvmae_encoder_heads: int = 16,
-        mvmae_decoder_heads: int = 16,
-        masking_ratio: float = 0.75,
-        coef_mvmae: float = 0.005,
-        feature_dim: int = 100,
-        hidden_dim: int = 1024,
-        critic_target_tau: float = 0.001,
-        stddev_schedule: str = "linear(1.0,0.1,500000)",
-        stddev_clip: float = 0.3,
+        eval_step: int = 500_000,
     ):
-        self.device = torch.device(device if device is not None else ("cuda" if torch.cuda.is_available() else "cpu"))
-
-        self.num_frames = int(num_frames)
-        self.policy_hw = int(policy_hw)
-        self.in_channels = 3 * self.num_frames
-        self._frames = deque(maxlen=self.num_frames)
-
-        if not os.path.exists(weights_path):
-            raise FileNotFoundError(f"Weights not found: {weights_path}")
-
-        ckpt = torch.load(weights_path, map_location=self.device)
-
-        if "actor" not in ckpt or not isinstance(ckpt["actor"], dict):
-            raise RuntimeError("Checkpoint missing 'actor' state_dict.")
-
-        # Infer action_dim from actor last layer (policy.4.weight)
-        action_dim = None
-        for k, v in ckpt["actor"].items():
-            if k.endswith("policy.4.weight") and isinstance(v, torch.Tensor):
-                action_dim = int(v.shape[0])
-                break
-        if action_dim is None:
-            raise RuntimeError("Could not infer action_dim from ckpt['actor'] (expected policy.4.weight).")
-
-        cfg = ckpt.get("cfg", {}) if isinstance(ckpt.get("cfg", {}), dict) else {}
-        # Prefer checkpoint cfg when present
-        ckpt_patch = int(cfg.get("patch_size", mvmae_patch_size))
-        ckpt_feat = int(cfg.get("feature_dim", feature_dim))
-        ckpt_hidden = int(cfg.get("hidden_dim", hidden_dim))
-        ckpt_mask = float(cfg.get("masking_ratio", masking_ratio))
-        ckpt_action_shape = cfg.get("action_shape", (action_dim,))
-        if isinstance(ckpt_action_shape, (list, tuple)) and len(ckpt_action_shape) >= 1:
-            ckpt_action_dim = int(ckpt_action_shape[0])
-        else:
-            ckpt_action_dim = action_dim
-
-        if ckpt_action_dim != action_dim:
-            raise RuntimeError(f"Action dim mismatch: inferred {action_dim} but cfg says {ckpt_action_dim}")
-
-        # Inference uses your runtime frame stack, so in_channels must match that.
-        ckpt_in_ch = int(cfg.get("in_channels", self.in_channels))
-        if ckpt_in_ch != self.in_channels:
-            raise RuntimeError(
-                f"in_channels mismatch: checkpoint cfg has {ckpt_in_ch}, "
-                f"but you configured num_frames={self.num_frames} => in_channels={self.in_channels}."
-            )
-
-        # Policy image size for the encoder must match training (usually 64).
-        ckpt_img_h = int(cfg.get("img_h_size", self.policy_hw))
-        ckpt_img_w = int(cfg.get("img_w_size", self.policy_hw))
-        if ckpt_img_h != self.policy_hw or ckpt_img_w != self.policy_hw:
-            raise RuntimeError(
-                f"policy_hw mismatch: checkpoint cfg is ({ckpt_img_h},{ckpt_img_w}) "
-                f"but this script uses policy_hw={self.policy_hw}."
-            )
-
-        self.agent = DrQV2Agent(
-            action_shape=(action_dim,),
-            device=self.device,
-            lr=1e-4,
-            logger=None,
-
-            mvmae_patch_size=ckpt_patch,
-            mvmae_encoder_embed_dim=mvmae_encoder_embed_dim,
-            mvmae_decoder_embed_dim=mvmae_decoder_embed_dim,
-            mvmae_encoder_heads=mvmae_encoder_heads,
-            mvmae_decoder_heads=mvmae_decoder_heads,
-
-            in_channels=self.in_channels,
-            img_h_size=self.policy_hw,
-            img_w_size=self.policy_hw,
-
-            masking_ratio=ckpt_mask,
-            coef_mvmae=coef_mvmae,
-
-            feature_dim=ckpt_feat,
-            hidden_dim=ckpt_hidden,
-
-            critic_target_tau=critic_target_tau,
-
-            # Hard safety: no exploration randomness in control script
-            num_expl_steps=0,
-
-            update_every_steps=2,
-            update_mvmae_every_steps=10,
-            stddev_schedule=stddev_schedule,
-            stddev_clip=stddev_clip,
+        self.device = (
+            torch.device(device)
+            if device is not None
+            else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         )
+        self.num_frames = num_frames
+        self.eval_step = eval_step
 
-        missing = []
-        for k in ("mvmae", "trunc", "actor", "critic"):
-            if k not in ckpt:
-                missing.append(k)
-        if missing:
-            raise RuntimeError(f"Checkpoint missing keys required for inference: {missing}")
-
-        # Load the full inference path
-        self.agent.mvmae.load_state_dict(ckpt["mvmae"])
-        self.agent.trunc.load_state_dict(ckpt["trunc"])
-        self.agent.actor.load_state_dict(ckpt["actor"])
-        self.agent.critic.load_state_dict(ckpt["critic"])
-
-        # Targets are optional for inference, but load if present
-        if "critic_target" in ckpt:
-            self.agent.critic_target.load_state_dict(ckpt["critic_target"])
-        else:
-            self.agent.critic_target.load_state_dict(self.agent.critic.state_dict())
-
-        if "trunc_target" in ckpt:
-            self.agent.trunc_target.load_state_dict(ckpt["trunc_target"])
-        else:
-            self.agent.trunc_target.load_state_dict(self.agent.trunc.state_dict())
-
-        for p in self.agent.critic_target.parameters():
-            p.requires_grad = False
-        for p in self.agent.trunc_target.parameters():
-            p.requires_grad = False
-
+        self.agent = self._load_agent(checkpoint_path)
         self.agent.train(False)
 
-    def reset(self):
-        self._frames.clear()
+        self._frame_buf: deque[np.ndarray] = deque(maxlen=num_frames)
 
-    def _prep_pov_for_policy(self, pov_rgb_u8_hwc: np.ndarray) -> np.ndarray:
-        if pov_rgb_u8_hwc.dtype != np.uint8:
-            pov_rgb_u8_hwc = np.asarray(pov_rgb_u8_hwc, dtype=np.uint8)
+    def process(self, cam_input: np.ndarray, tof_input: float | np.ndarray) -> np.ndarray:
+        """
+        cam_input : np.ndarray
+            Raw RGB frame from the POV camera, shape (H, W, 3) uint8.
+            H and W must match img_h_size / img_w_size used during training.
+        tof_input : float or np.ndarray
+            Raw ToF distance in metres (e.g. 0.45).
+            Pass float('nan') or a non-positive value if the sensor has no valid reading.
 
-        # Downsample render POV -> 64x64 for policy
-        if pov_rgb_u8_hwc.shape[0] != self.policy_hw or pov_rgb_u8_hwc.shape[1] != self.policy_hw:
-            pov_small = cv2.resize(pov_rgb_u8_hwc, (self.policy_hw, self.policy_hw), interpolation=cv2.INTER_AREA)
-        else:
-            pov_small = pov_rgb_u8_hwc
+        Returns
+        action : np.ndarray, shape (action_dim,), float32 in [-1, 1]
+            One value per controlled joint (in the order of controlled_joints (degree)
+            followed by the drive joint value (1 cm fwd or backwd)
+        """
+        frame = self._preprocess_frame(cam_input)
+        self._push_frame(frame)
+        stacked = self._get_stacked_obs()
+        tof = self._preprocess_tof(tof_input)
 
-        # HWC -> CHW
-        chw = np.transpose(pov_small, (2, 0, 1))  # (3,64,64)
+        obs = {"pov": stacked, "tof": tof}
 
-        # Frame stack to (3*num_frames,64,64)
-        if len(self._frames) == 0:
+        with torch.no_grad(), utils.eval_mode(self.agent):
+            action = self.agent.act(obs, self.eval_step, eval_mode=True)
+        return action.astype(np.float32)
+
+    def reset(self) -> None:
+        self._frame_buf.clear()
+
+    def _preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
+        if frame.ndim != 3 or frame.shape[2] != 3:
+            raise ValueError(f"Expected (H, W, 3) RGB frame, got {frame.shape}")
+        return np.transpose(frame, (2, 0, 1)).astype(np.uint8)
+
+    def _push_frame(self, frame: np.ndarray) -> None:
+        if len(self._frame_buf) == 0:
             for _ in range(self.num_frames):
-                self._frames.append(chw.copy())
+                self._frame_buf.append(frame)
         else:
-            self._frames.append(chw.copy())
+            self._frame_buf.append(frame)
 
-        stacked = np.concatenate(list(self._frames), axis=0).astype(np.uint8)
-        return stacked
+    def _get_stacked_obs(self) -> np.ndarray:
+        return np.concatenate(list(self._frame_buf), axis=0)
 
-    def act_from_env_dict(self, ts: dict, step: int) -> np.ndarray:
-        pov_u8 = ts["pov_obs"]          # HWC uint8 (render size, big)
-        tof_norm = float(ts["tof_obs"]) # already normalized in your ArmEnv.get_obs()
+    @staticmethod
+    def _preprocess_tof(tof: float | np.ndarray) -> np.ndarray:
+        raw = float(np.asarray(tof).flat[0])
+        if not math.isfinite(raw) or raw <= 0:
+            val = 1.0
+        else:
+            val = float(np.clip(raw / 2.0, 0.0, 0.99))
+        return np.array([val], dtype=np.float32)
 
-        pov_stack = self._prep_pov_for_policy(pov_u8)
+    def _load_agent(self, path: str | Path) -> DrQV2Agent:
+        ckpt = torch.load(str(path), map_location=self.device)
+        cfg = ckpt["cfg"]
 
-        obs = {
-            "pov": pov_stack,  # uint8 (C,H,W)
-            "tof": np.array([tof_norm], dtype=np.float32),
-        }
+        agent = DrQV2Agent(
+            action_shape=tuple(cfg["action_shape"]),
+            device=self.device,
+            mvmae_patch_size=cfg["patch_size"],
+            mvmae_encoder_embed_dim=cfg["encoder_embed_dim"],
+            mvmae_decoder_embed_dim=cfg["decoder_embed_dim"],
+            mvmae_encoder_heads=cfg["encoder_heads"],
+            mvmae_decoder_heads=cfg["decoder_heads"],
+            in_channels=cfg["in_channels"],
+            img_h_size=cfg["img_h_size"],
+            img_w_size=cfg["img_w_size"],
+            masking_ratio=cfg["masking_ratio"],
+            feature_dim=cfg["feature_dim"],
+            hidden_dim=cfg["hidden_dim"],
+        )
 
-        return self.agent.act(obs, step=step, eval_mode=True).astype(np.float32)
+        agent.mvmae.load_state_dict(ckpt["mvmae"])
+        agent.trunc.load_state_dict(ckpt["trunc"])
+        agent.trunc_target.load_state_dict(ckpt["trunc_target"])
+        agent.actor.load_state_dict(ckpt["actor"])
+        agent.critic.load_state_dict(ckpt["critic"])
+        agent.critic_target.load_state_dict(ckpt["critic_target"])
+
+        print(f"[Control] Loaded checkpoint from '{path}' (step={ckpt.get('step')})")
+        return agent
 
 
-def main():
-    xml_path = str(Path("Simulation") / "Assets" / "scene.xml")
-
-    display_w = 600
-    display_h = 600
-
-    env = ArmEnv(
-        xml_path=xml_path,
-        width=display_w,
-        height=display_h,
-        display=True,
-        discount=0.99,
-        episode_horizon=300,
+def run_sim(
+    checkpoint_path: str,
+    xml_path: str = str(Path("Simulation") / "Assets" / "scene.xml"),
+    episode_horizon: int = 300,
+    display_scale: int = 6,
+    img_size: int = 64,
+    num_frames: int = 3,
+    discount: float = 0.99,
+    wait_ms: int = 30,
+) -> None:
+    from Arm_Env.arm_env import ArmEnv
+    from DrQv2_Architecture.env_wrappers import (
+        FrameStackWrapper,
+        ActionRepeatWrapper,
+        ExtendedTimeStepWrapper,
     )
 
-    ctrl = Control(weights_path="Results/Iteration4/agent_weights.pt", num_frames=3, policy_hw=64)
+    base_env = ArmEnv(
+        xml_path=xml_path,
+        width=img_size,
+        height=img_size,
+        display=False,
+        discount=discount,
+        episode_horizon=episode_horizon,
+    )
+    env = FrameStackWrapper(base_env, num_frames=num_frames)
+    env = ActionRepeatWrapper(env, num_repeats=2)
+    env = ExtendedTimeStepWrapper(env)
 
-    ts = env.reset()
-    ctrl.reset()
+    control = Control(checkpoint_path=checkpoint_path, num_frames=num_frames)
+
+    disp_size = img_size * display_scale
+    pov_win   = f"POV  ({img_size}px -> {disp_size}px)"
+    scene_win = f"Scene ({img_size}px -> {disp_size}px)"
+    cv2.namedWindow(pov_win,   cv2.WINDOW_AUTOSIZE)
+    cv2.namedWindow(scene_win, cv2.WINDOW_AUTOSIZE)
+
+    time_step = env.reset()
+    control.reset()
 
     step = 0
-    action_repeat = 2
+    total_reward = 0.0
 
-    while True:
-        action = ctrl.act_from_env_dict(ts, step=step)
+    print(f"\n[SimRun] Starting episode  (horizon={episode_horizon}, scale={display_scale}x)")
+    print(f"         Checkpoint : {checkpoint_path}")
+    print(f"         Press Q to quit early.\n")
 
-        for _ in range(action_repeat):
-            ts = env.step(action)
-            step += 1
-            if ts["step_type"].name == "LAST":
-                break
+    while not time_step.last():
+        stacked_chw = time_step.pov
+        latest_chw  = stacked_chw[-3:]
+        latest_hwc  = np.transpose(latest_chw, (1, 2, 0))
+        tof_raw     = float(base_env.last_tof_m)
 
-        if (cv2.waitKey(1) & 0xFF) in (ord("q"), 27):
+        action = control.process(latest_hwc, tof_raw)
+
+        base_env._gl_ctx.make_current()
+        scene_hwc = base_env._render_fixedcam(base_env._mjv_cam_scene)
+
+        pov_big   = cv2.resize(cv2.cvtColor(latest_hwc, cv2.COLOR_RGB2BGR), (disp_size, disp_size), interpolation=cv2.INTER_NEAREST)
+        scene_big = cv2.resize(cv2.cvtColor(scene_hwc,  cv2.COLOR_RGB2BGR), (disp_size, disp_size), interpolation=cv2.INTER_NEAREST)
+
+        font      = cv2.FONT_HERSHEY_SIMPLEX
+        hud_scale = 0.5 * display_scale / 4
+        lh        = int(20 * display_scale / 4)
+        x0, y0   = 8, lh
+
+        tof_str = f"ToF: {base_env.last_tof_m:.4f} m" if math.isfinite(base_env.last_tof_m) else "ToF: nan"
+        hit_str = f"Hit: {bool(base_env.last_tof_hit)}"
+        h_str   = f"h: {base_env.last_align_h_deg:.1f}" if math.isfinite(base_env.last_align_h_deg) else "h: n/a"
+        v_str   = f"v: {base_env.last_align_v_deg:.1f}" if math.isfinite(base_env.last_align_v_deg) else "v: n/a"
+        vo_str  = f"v*: {base_env.last_opt_v_deg:.1f}"  if math.isfinite(base_env.last_opt_v_deg)  else "v*: n/a"
+
+        reward_now, info = base_env.evaluate_state()
+        rew_str = f"R: {reward_now:.3f}  app={info['approach_reward']:.2f}  align={info['align_reward']:.2f}  hit={info['hit_bonus']:.2f}"
+
+        joint_parts = [f"{jn}: {math.degrees(base_env.targets_rad.get(jn, 0.0)):.1f}" for jn in base_env.controlled_joints]
+        if base_env.drive_joint is not None:
+            joint_parts.append(f"{base_env.drive_joint}: {base_env.targets_rad.get(base_env.drive_joint, 0.0):.3f}m")
+        opt_str = f"opt_v*: {base_env.last_opt_v_deg:.2f}" if math.isfinite(base_env.last_opt_v_deg) else "opt_v*: n/a"
+        joint_parts.append(opt_str)
+
+        hud_lines = [tof_str, hit_str, f"{h_str}  {v_str}  {vo_str}", rew_str, "  ".join(joint_parts), f"step: {step}"]
+        for i, txt in enumerate(hud_lines):
+            cv2.putText(scene_big, txt, (x0, y0 + i * lh), font, hud_scale, (0, 0, 0), 2, cv2.LINE_AA)
+            cv2.putText(scene_big, txt, (x0, y0 + i * lh), font, hud_scale, (0, 200, 0), 1, cv2.LINE_AA)
+
+        cv2.imshow(pov_win,   pov_big)
+        cv2.imshow(scene_win, scene_big)
+
+        if cv2.waitKey(wait_ms) & 0xFF == ord('q'):
+            print("[SimRun] User quit.")
             break
 
-        if ts["step_type"].name == "LAST":
-            ts = env.reset()
-            ctrl.reset()
+        time_step     = env.step(action)
+        total_reward += float(time_step.reward[0]) if time_step.reward is not None else 0.0
+        step         += 1
 
+        if step % 50 == 0:
+            print(f"  step={step:4d}  total_reward={total_reward:.3f}  tof={base_env.last_tof_m:.4f}  hit={base_env.last_tof_hit}")
+
+    print(f"\n[SimRun] Done.  steps={step}  total_reward={total_reward:.3f}")
     cv2.destroyAllWindows()
 
 
+def get_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser()
+    p.add_argument("--checkpoint",      type=str, required=True)
+    p.add_argument("--xml_path",        type=str, default=str(Path("Simulation") / "Assets" / "scene.xml"))
+    p.add_argument("--episode_horizon", type=int, default=300)
+    p.add_argument("--display_scale",   type=int, default=6)
+    p.add_argument("--img_size",        type=int, default=64)
+    p.add_argument("--num_frames",      type=int, default=3)
+    p.add_argument("--wait_ms",         type=int, default=30)
+    return p.parse_args()
+
+
 if __name__ == "__main__":
-    main()
+    args = get_args()
+    run_sim(
+        checkpoint_path  = args.checkpoint,
+        xml_path         = args.xml_path,
+        episode_horizon  = args.episode_horizon,
+        display_scale    = args.display_scale,
+        img_size         = args.img_size,
+        num_frames       = args.num_frames,
+        wait_ms          = args.wait_ms,
+    )

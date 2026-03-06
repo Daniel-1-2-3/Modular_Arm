@@ -290,7 +290,7 @@ class ArmEnv:
         th = math.radians(pitch_deg)
         num = h_m * math.cos(th) - z * math.sin(th)
         den = h_m * math.sin(th) + z * math.cos(th)
-        return float(math.degrees(math.atan2(num, den)))
+        return float(-math.degrees(math.atan2(num, den)))
 
     def _tof_hitting_target(self, body_name: str = "red_cube") -> bool:
         """Return True iff the ToF *sensor ray* is hitting the target body.

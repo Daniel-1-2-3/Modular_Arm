@@ -34,17 +34,31 @@ class Control:
         self.agent = self._load_agent(checkpoint_path)
         self.agent.train(False)
         self._frame_buf: deque[np.ndarray] = deque(maxlen=num_frames)
+        self._frozen = False
 
-    def process(self, cam_input: np.ndarray, tof_input: float | np.ndarray) -> np.ndarray:
+    def process(self, cam_input: np.ndarray, tof_m: float) -> np.ndarray:
+        # Refer to process_func.txt
+        if self._frozen:
+            return np.zeros(4, dtype=np.float32)
         frame = self._preprocess_frame(cam_input)
         self._push_frame(frame)
-        obs = {"pov": self._get_stacked_obs(), "tof": self._preprocess_tof(tof_input)}
+        obs = {
+            "pov": self._get_stacked_obs(),
+            "tof": self._preprocess_tof(tof_m),
+        }
         with torch.no_grad(), utils.eval_mode(self.agent):
             action = self.agent.act(obs, self.eval_step, eval_mode=True)
         return action.astype(np.float32)
 
+    def check_and_freeze(self, tof_m: float) -> bool:
+        if math.isfinite(tof_m) and 0.0 < tof_m <= 0.06:
+            self._frozen = True
+            return True
+        return self._frozen
+
     def reset(self) -> None:
         self._frame_buf.clear()
+        self._frozen = False
 
     def _preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
         if frame.ndim != 3 or frame.shape[2] != 3:
@@ -62,14 +76,15 @@ class Control:
         return np.concatenate(list(self._frame_buf), axis=0)
 
     @staticmethod
-    def _preprocess_tof(tof: float | np.ndarray) -> np.ndarray:
-        raw = float(np.asarray(tof).flat[0])
-        val = 1.0 if (not math.isfinite(raw) or raw <= 0) else float(np.clip(raw / 2.0, 0.0, 0.99))
+    def _preprocess_tof(tof_m: float) -> np.ndarray:
+        # Normalise raw metres to [0, 0.99], expected by agent
+        val = 1.0 if (not math.isfinite(tof_m) or tof_m <= 0) \
+              else float(np.clip(tof_m / 2.0, 0.0, 0.99))
         return np.array([val], dtype=np.float32)
 
     def _load_agent(self, path: str | Path) -> DrQV2Agent:
         ckpt = torch.load(str(path), map_location=self.device)
-        cfg  = ckpt["cfg"]
+        cfg = ckpt["cfg"]
         agent = DrQV2Agent(
             action_shape = tuple(cfg["action_shape"]),
             device = self.device,
@@ -94,6 +109,43 @@ class Control:
         print(f"[Control] Loaded checkpoint from '{path}' (step={ckpt.get('step')})")
         return agent
 
+def _render_hud(
+    scene_big: np.ndarray,
+    env: object,
+    tof_m: float,
+    step: int,
+    total_reward: float,
+    frozen: bool,
+    lh: int,
+    hud_scale: float,
+) -> None:
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    reward_now, info = env.evaluate_state()
+
+    tof_str = f"ToF: {tof_m:.4f} m" if math.isfinite(tof_m) else "ToF: nan"
+    frozen_str = "  [FROZEN]" if frozen else ""
+    h_str = f"h: {env.last_align_h_deg:.1f}"  if math.isfinite(env.last_align_h_deg)  else "h: n/a"
+    v_str = f"v: {env.last_align_v_deg:.1f}"  if math.isfinite(env.last_align_v_deg)  else "v: n/a"
+    vo_str = f"v*: {env.last_opt_v_deg:.1f}"   if math.isfinite(env.last_opt_v_deg)    else "v*: n/a"
+    rew_str = (f"R: {reward_now:.3f}  app={info['approach_reward']:.2f}"
+                  f"  align={info['align_reward']:.2f}  hit={info['hit_bonus']:.2f}")
+    j_parts = [f"{jn}: {math.degrees(env.targets_rad.get(jn, 0.0)):.1f}"
+                  for jn in env.controlled_joints]
+    if env.drive_joint:
+        j_parts.append(f"{env.drive_joint}: {env.targets_rad.get(env.drive_joint, 0.0):.3f}m")
+
+    hud_lines = [
+        tof_str + frozen_str,
+        f"Hit: {bool(env.last_tof_hit)}",
+        f"{h_str}  {v_str}  {vo_str}",
+        rew_str,
+        "  ".join(j_parts),
+        f"step: {step}  total_R: {total_reward:.3f}",
+    ]
+    for i, txt in enumerate(hud_lines):
+        cv2.putText(scene_big, txt, (8, lh + i * lh), font, hud_scale, (0, 0, 0), 2, cv2.LINE_AA)
+        cv2.putText(scene_big, txt, (8, lh + i * lh), font, hud_scale, (0, 200, 0), 1, cv2.LINE_AA)
+
 def run_sim(
     checkpoint_path: str,
     xml_path: str = str(Path("Simulation") / "Assets" / "scene.xml"),
@@ -102,54 +154,55 @@ def run_sim(
     wait_ms: int = 30,
 ) -> None:
     from Arm_Env.arm_env import ArmEnv
-    from DrQv2_Architecture.env_wrappers import FrameStackWrapper, ActionRepeatWrapper, ExtendedTimeStepWrapper
 
     cfg = torch.load(checkpoint_path, map_location="cpu")["cfg"]
     img_size = cfg["img_h_size"]
     num_frames = cfg.get("num_frames", 3)
     discount = cfg.get("discount", 0.99)
     disp_size = img_size * display_scale
+    lh = int(20 * display_scale / 4)
+    hud_scale = 0.5 * display_scale / 4
 
-    base_env = ArmEnv(xml_path=xml_path, width=img_size, height=img_size, display=False, discount=discount, episode_horizon=episode_horizon)
-    env = ExtendedTimeStepWrapper(ActionRepeatWrapper(FrameStackWrapper(base_env, num_frames=num_frames), num_repeats=2))
+    env = ArmEnv(
+        xml_path=xml_path,
+        width=img_size, height=img_size,
+        display=False,
+        discount=discount,
+        episode_horizon=episode_horizon,
+    )
+    
     control = Control(checkpoint_path=checkpoint_path, num_frames=num_frames)
-
-    pov_win, scene_win = f"POV ({img_size} {disp_size}px)", f"Scene ({img_size} {disp_size}px)"
+    pov_win = f"POV ({img_size}→{disp_size}px)"
+    scene_win = f"Scene ({img_size}→{disp_size}px)"
     cv2.namedWindow(pov_win, cv2.WINDOW_AUTOSIZE)
     cv2.namedWindow(scene_win, cv2.WINDOW_AUTOSIZE)
 
-    time_step = env.reset()
+    info = env.reset()
     control.reset()
     step, total_reward = 0, 0.0
 
-    while not time_step.last():
-        latest_hwc = np.transpose(time_step.pov[-3:], (1, 2, 0))
-        action = control.process(latest_hwc, float(base_env.last_tof_m))
+    cam_hwc = info["pov_obs"]
+    tof_m = float(env.last_tof_m)
+    action = control.process(cam_hwc, tof_m)
 
-        base_env._gl_ctx.make_current()
-        scene_hwc = base_env._render_fixedcam(base_env._mjv_cam_scene)
+    episode_done = False
+    while not episode_done:
+        info = env.step(action)
+        total_reward += float(info["reward"] or 0.0)
+        step += 1
+        episode_done = (info["step_type"].value == 2)
 
-        pov_big = cv2.resize(cv2.cvtColor(latest_hwc, cv2.COLOR_RGB2BGR), (disp_size, disp_size), interpolation=cv2.INTER_NEAREST)
-        scene_big = cv2.resize(cv2.cvtColor(scene_hwc, cv2.COLOR_RGB2BGR), (disp_size, disp_size), interpolation=cv2.INTER_NEAREST)
+        tof_m = float(env.last_tof_m)
+        cam_hwc = info["pov_obs"]
 
-        font, lh = cv2.FONT_HERSHEY_SIMPLEX, int(20 * display_scale / 4)
-        hud_scale = 0.5 * display_scale / 4
-        reward_now, info = base_env.evaluate_state()
+        just_frozen = control.check_and_freeze(tof_m)
+        action = control.process(cam_hwc, tof_m)
 
-        tof_str = f"ToF: {base_env.last_tof_m:.4f} m" if math.isfinite(base_env.last_tof_m) else "ToF: nan"
-        h_str = f"h: {base_env.last_align_h_deg:.1f}" if math.isfinite(base_env.last_align_h_deg) else "h: n/a"
-        v_str = f"v: {base_env.last_align_v_deg:.1f}" if math.isfinite(base_env.last_align_v_deg) else "v: n/a"
-        vo_str = f"v*: {base_env.last_opt_v_deg:.1f}" if math.isfinite(base_env.last_opt_v_deg) else "v*: n/a"
-        rew_str = f"R: {reward_now:.3f}  app={info['approach_reward']:.2f}  align={info['align_reward']:.2f}  hit={info['hit_bonus']:.2f}"
-        j_parts = [f"{jn}: {math.degrees(base_env.targets_rad.get(jn, 0.0)):.1f}" for jn in base_env.controlled_joints]
-        if base_env.drive_joint:
-            j_parts.append(f"{base_env.drive_joint}: {base_env.targets_rad.get(base_env.drive_joint, 0.0):.3f}m")
-
-        hud_lines = [tof_str, f"Hit: {bool(base_env.last_tof_hit)}", f"{h_str}  {v_str}  {vo_str}",
-                     rew_str, "  ".join(j_parts), f"step: {step}"]
-        for i, txt in enumerate(hud_lines):
-            cv2.putText(scene_big, txt, (8, lh + i * lh), font, hud_scale, (0, 0, 0), 2, cv2.LINE_AA)
-            cv2.putText(scene_big, txt, (8, lh + i * lh), font, hud_scale, (0, 200, 0), 1, cv2.LINE_AA)
+        env._gl_ctx.make_current()
+        scene_hwc = env._render_fixedcam(env._mjv_cam_scene)
+        pov_big = cv2.resize(cv2.cvtColor(cam_hwc, cv2.COLOR_RGB2BGR), (disp_size, disp_size), interpolation=cv2.INTER_LANCZOS4)
+        scene_big = cv2.resize(cv2.cvtColor(scene_hwc, cv2.COLOR_RGB2BGR), (disp_size, disp_size), interpolation=cv2.INTER_LANCZOS4)
+        _render_hud(scene_big, env, tof_m, step, total_reward, control._frozen, lh, hud_scale)
 
         cv2.imshow(pov_win, pov_big)
         cv2.imshow(scene_win, scene_big)
@@ -157,13 +210,18 @@ def run_sim(
             print("[SimRun] User quit.")
             break
 
-        time_step = env.step(action)
-        total_reward += float(time_step.reward[0]) if time_step.reward is not None else 0.0
-        step += 1
         if step % 50 == 0:
-            print(f"step={step:4d} total_reward={total_reward:.3f} tof={base_env.last_tof_m:.4f}  hit={base_env.last_tof_hit}")
+            print(f"step={step:4d}  total_reward={total_reward:.3f}"
+                  f"  tof={tof_m:.4f}  hit={env.last_tof_hit}")
 
-    print(f"\n[SimRun] steps={step} total_reward={total_reward:.3f}")
+        if just_frozen:
+            print(f"[SimRun] Frozen at tof={tof_m:.4f} m, step={step}")
+            while True:
+                if cv2.waitKey(wait_ms) & 0xFF == ord('q'):
+                    break
+            break
+
+    print(f"\n[SimRun] steps={step}  total_reward={total_reward:.3f}")
     cv2.destroyAllWindows()
 
 def get_args() -> argparse.Namespace:
@@ -177,4 +235,10 @@ def get_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = get_args()
-    run_sim(args.checkpoint, args.xml_path, args.episode_horizon, args.display_scale, args.wait_ms)
+    run_sim(
+        args.checkpoint,
+        args.xml_path,
+        args.episode_horizon,
+        args.display_scale,
+        args.wait_ms,
+    )

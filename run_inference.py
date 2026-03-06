@@ -37,7 +37,6 @@ class Control:
         self._frozen = False
 
     def process(self, cam_input: np.ndarray, tof_m: float) -> np.ndarray:
-        # Refer to process_func.txt
         if self._frozen:
             return np.zeros(4, dtype=np.float32)
         frame = self._preprocess_frame(cam_input)

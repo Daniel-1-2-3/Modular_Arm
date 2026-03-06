@@ -100,7 +100,7 @@ class Visualize:
         fig.tight_layout()
         self._save(fig, "recon_loss")
 
-if __name__ == "__main__":
+if __name__ == "__main__": # ie python metrics_visualize.py Results/Iteration4/Metrics    
     if len(sys.argv) != 2:
         raise SystemExit("Usage: python metrics_visualize.py <path/to/Metrics>")
     Visualize(sys.argv[1])

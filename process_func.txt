@@ -1,0 +1,179 @@
+================================================================================
+  Control.process() API Reference
+================================================================================
+  control.process(cam_input, tof_input)  ->  action
+
+  This is the main function you call every control cycle. Feed it the latest
+  camera frame and distance sensor reading, and it returns a set of joint
+  commands to send to the robot. It handles all the internal preprocessing,
+  frame buffering, and neural network inference automatically — you do not
+  need to do anything special between calls.
+
+  Call control.reset() if you are starting a new episode or the robot has
+  been physically repositioned, so the internal frame history is cleared.
+
+
+--------------------------------------------------------------------------------
+  INPUT 1 — cam_input
+--------------------------------------------------------------------------------
+
+  Type    : numpy array
+  Shape   : (H, W, 3)
+  dtype   : uint8
+  Range   : 0 to 255 per channel
+
+  A single raw image from the robot's point-of-view camera. H and W must
+  match the resolution the model was trained at. The default is 64 x 64 px.
+  If you are unsure, check the 'img_h_size' and 'img_w_size' fields inside
+  the checkpoint file.
+
+  The channel order must be RGB. If your camera driver outputs BGR (which
+  is the OpenCV default), flip the channels before passing the frame in:
+
+      frame = frame[:, :, ::-1]
+
+  You do not need to normalize or resize the image yourself. That is handled
+  internally. Just pass the raw uint8 frame straight from your camera driver.
+
+  Internally, the last 3 frames are kept in a rolling buffer and stacked
+  together into a single (9, H, W) input tensor before being fed to the
+  encoder. This gives the network a short sense of recent motion. The buffer
+  is managed automatically. On the very first call after construction or
+  reset(), the buffer pre-fills itself by repeating the first frame three
+  times, so there is no warm-up period required.
+
+
+--------------------------------------------------------------------------------
+  INPUT 2 — tof_input
+--------------------------------------------------------------------------------
+
+  Type    : float  (or a single-element numpy array)
+  Units   : metres
+
+  The raw distance reading from your Time-of-Flight sensor. This should be
+  the physical distance in metres from the sensor to the nearest surface it
+  is seeing. For example, if the sensor is reading 45 cm, pass 0.45.
+
+  If the sensor has no valid lock — for example it is out of range, pointed
+  at a surface with no return, or the reading is otherwise unreliable — pass
+  float('nan'), 0.0, or any non-positive number. The function will substitute
+  a safe fallback value automatically.
+
+  The value you pass is normalized before reaching the network:
+
+      Valid reading  ->  clipped to the range 0.00 to 0.99
+                         using the formula:  val = clip(raw / 2.0, 0.0, 0.99)
+
+                         0.0 m  ->  0.00
+                         0.5 m  ->  0.25
+                         1.0 m  ->  0.50
+                         2.0 m  ->  0.99   (anything beyond 2 m clips here)
+
+      Invalid input  ->  forced to 1.0  (the out-of-range sentinel)
+
+  You do not need to do this normalization yourself. Just pass the raw
+  reading in metres.
+
+
+--------------------------------------------------------------------------------
+  RETURN VALUE — action
+--------------------------------------------------------------------------------
+
+  Type    : numpy array
+  Shape   : (4,)
+  dtype   : float32
+  Range   : -1.0 to +1.0  for every element
+
+  Each element is a normalised delta command for one joint. These are NOT
+  absolute position setpoints. They are incremental — your robot driver must
+  maintain a running target position for each joint and add the scaled delta
+  on every cycle.
+
+  The correct way to apply each command is:
+
+      target[joint] = target[joint] + (action[i] * scale)
+      target[joint] = clip(target[joint], lower_limit, upper_limit)
+
+  Do not pass the raw action values directly as position setpoints, and do
+  not skip the clipping step.
+
+  It is also recommended to treat any action element with an absolute value
+  below 0.02 as zero before applying it. This prevents the arm from slowly
+  drifting when the policy intends to hold still.
+
+
+  The four elements of the returned array are, in order:
+
+  -----------------------------------------------------------------------
+  action[0]  —  j_a_base  —  Base rotation (yaw / pan left-right)
+  -----------------------------------------------------------------------
+  Scale       :  multiply by 2.0 degrees to get the delta per step
+  +1.0        :  rotate base to the right
+  -1.0        :  rotate base to the left
+  Lower limit : -45.0 degrees  (-0.785 radians)
+  Upper limit : +45.0 degrees  (+0.785 radians)
+
+  -----------------------------------------------------------------------
+  action[1]  —  j_b_mid  —  Mid-arm pitch (elbow up / down)
+  -----------------------------------------------------------------------
+  Scale       :  multiply by 2.0 degrees to get the delta per step
+  +1.0        :  pitch arm upward
+  -1.0        :  pitch arm downward
+  Lower limit :   0.0 degrees  ( 0.000 radians)
+  Upper limit : +25.0 degrees  (+0.436 radians)
+
+  -----------------------------------------------------------------------
+  action[2]  —  j_c_end  —  End-effector / wrist tilt
+  -----------------------------------------------------------------------
+  Scale       :  multiply by 2.0 degrees to get the delta per step
+  +1.0        :  tilt end-effector forward / downward
+  -1.0        :  tilt end-effector backward / upward
+  Lower limit :  -90.0 degrees  (-1.571 radians)
+  Upper limit : +110.0 degrees  (+1.920 radians)
+
+  -----------------------------------------------------------------------
+  action[3]  —  j_drive  —  Linear rail (slide forward / backward)
+  -----------------------------------------------------------------------
+  Scale       :  multiply by 0.01 metres to get the delta per step
+                 (i.e. each step moves the rail up to 1 cm)
+  +1.0        :  retract rail back toward home position
+  -1.0        :  extend rail outward toward the target
+  Lower limit :  -0.70 metres  (fully extended)
+  Upper limit :   0.00 metres  (home / fully retracted)
+
+  Note on the drive joint direction: the home position is 0.0 m and the
+  fully extended position is -0.70 m. This means negative action values
+  drive the arm toward the target, and positive values bring it back home.
+
+
+--------------------------------------------------------------------------------
+  MINIMAL USAGE EXAMPLE
+--------------------------------------------------------------------------------
+
+  from control import Control
+  import numpy as np
+
+  # Create the controller once at startup
+  ctrl = Control(checkpoint_path="checkpoints/policy.pt")
+
+  # --- Your control loop ---
+  # Assume get_camera_frame() returns a (64, 64, 3) uint8 RGB array
+  # Assume get_tof_reading() returns a float in metres
+
+  while True:
+      frame  = get_camera_frame()   # (64, 64, 3) uint8 RGB
+      tof    = get_tof_reading()    # e.g. 0.38 for 38 cm
+
+      action = ctrl.process(frame, tof)
+
+      # action[0] -> j_a_base : scale * 2 deg, clip to [-45, +45] deg
+      # action[1] -> j_b_mid  : scale * 2 deg, clip to [  0, +25] deg
+      # action[2] -> j_c_end  : scale * 2 deg, clip to [-90,+110] deg
+      # action[3] -> j_drive  : scale * 0.01 m, clip to [-0.70, 0.0] m
+
+      send_to_robot(action)
+
+  # Call this if starting a new approach / new episode
+  ctrl.reset()
+
+================================================================================

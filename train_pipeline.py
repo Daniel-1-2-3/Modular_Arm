@@ -50,7 +50,7 @@ class Workshop:
         stddev_clip: float = 0.3,
         lr: float = 1e-4,
         discount: float = 0.99,
-        action_repeat: int = 2,
+        action_repeat: int = 2, # keep >1 to reduce single-frame twitching and help latency robustness
 
         # MVMAE
         mvmae_patch_size: int = 8,
@@ -71,6 +71,9 @@ class Workshop:
         img_w_size: int = 64,
         num_frames: int = 3,   # frame stack depth; in_channels = 3*num_frames
         display: bool = False, # ArmEnv handles display internally; keep False for training speed
+        enable_domain_randomization: bool = True,
+        action_delay_steps: int = 2,
+        obs_delay_steps: int = 2,
     ):
         self.device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -106,6 +109,9 @@ class Workshop:
         self.num_frames = num_frames
         self.in_channels = 3 * num_frames
         self.display = display
+        self.enable_domain_randomization = enable_domain_randomization
+        self.action_delay_steps = action_delay_steps
+        self.obs_delay_steps = obs_delay_steps
 
         self.work_dir = Path.cwd()
         print(f'Workspace: {self.work_dir}')
@@ -167,6 +173,9 @@ class Workshop:
             display=display,
             discount=self.discount,
             episode_horizon=self.episode_horizon,
+            enable_domain_randomization=self.enable_domain_randomization,
+            action_delay_steps=self.action_delay_steps,
+            obs_delay_steps=self.obs_delay_steps,
         )
         env = FrameStackWrapper(env, num_frames=self.num_frames)
         env = ActionRepeatWrapper(env, num_repeats=self.action_repeat)
@@ -353,7 +362,8 @@ def get_args():
     parser.add_argument("--stddev_clip", type=float, default=0.3)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--discount", type=float, default=0.99)
-    parser.add_argument("--action_repeat", type=int, default=1)
+    # FIX 6: default matches Workshop.__init__ default of 2
+    parser.add_argument("--action_repeat", type=int, default=2)
     parser.add_argument("--mvmae_patch_size", type=int, default=8)
     parser.add_argument("--mvmae_encoder_embed_dim", type=int, default=256)
     parser.add_argument("--mvmae_decoder_embed_dim", type=int, default=128)
@@ -368,6 +378,9 @@ def get_args():
     parser.add_argument("--img_w_size", type=int, default=64)
     parser.add_argument("--num_frames", type=int, default=3)
     parser.add_argument("--display", action="store_true")
+    parser.add_argument("--enable_domain_randomization", type=lambda x: str(x).lower() in {"1", "true", "yes", "y"}, default=True)
+    parser.add_argument("--action_delay_steps", type=int, default=2)
+    parser.add_argument("--obs_delay_steps", type=int, default=2)
 
     return parser.parse_args()
 

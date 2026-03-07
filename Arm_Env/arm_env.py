@@ -229,9 +229,9 @@ class ArmEnv:
             "pov_obs": obs["pov"],
             "tof_obs": obs["tof"],
             "step_type": self.step_type,
-            "action": None,
-            "reward": None,
-            "discount": self.discount,
+            "action": np.zeros(self.action_dim, dtype=np.float32),
+            "reward": np.zeros(1, dtype=np.float32),
+            "discount": np.array([self.discount], dtype=np.float32),
         }
 
     def _build_obs_now(self) -> dict[str, Any]:
@@ -382,8 +382,9 @@ class ArmEnv:
             "pov_obs": obs["pov"],
             "tof_obs": obs["tof"],
             "step_type": self.step_type,
-            "reward": reward,
-            "discount": 0.0 if done else self.discount,
+            "action": self._pending_action.copy(),
+            "reward": np.array([reward], dtype=np.float32),
+            "discount": np.array([0.0 if done else self.discount], dtype=np.float32),
         }
 
     def _update_sensors(self, body_name: str = "red_cube") -> None:
@@ -728,12 +729,17 @@ class ArmEnv:
     def _randomize(self, textures_dir: str = os.path.join("Simulation", "Textures")) -> tuple[str, str]:
         tex_dir = Path(textures_dir)
         exts = {".jpg", ".jpeg", ".png", ".bmp"}
-        files = [p for p in tex_dir.iterdir() if p.is_file() and p.suffix.lower() in exts]
-        floor_img_path, table_img_path = random.sample(files, 2)
+        files = []
+        if tex_dir.exists():
+            files = [p for p in tex_dir.iterdir() if p.is_file() and p.suffix.lower() in exts]
 
         self._gl_ctx.make_current()
-        RandomizeHelpers._randomize_bg_textures("T_floor", str(floor_img_path), self.model, self._mjr_ctx)
-        RandomizeHelpers._randomize_bg_textures("T_table", str(table_img_path), self.model, self._mjr_ctx)
+        if len(files) >= 2:
+            floor_img_path, table_img_path = random.sample(files, 2)
+            RandomizeHelpers._randomize_bg_textures("T_floor", str(floor_img_path), self.model, self._mjr_ctx)
+            RandomizeHelpers._randomize_bg_textures("T_table", str(table_img_path), self.model, self._mjr_ctx)
+        else:
+            floor_img_path, table_img_path = "", ""
         RandomizeHelpers._randomize_skybox_gradient(self.model, self._mjr_ctx)
         RandomizeHelpers._randomize_target_start(self.model, self.data)
 

@@ -12,7 +12,6 @@ import numpy as np
 import torch
 import time
 import argparse
-from types import SimpleNamespace
 from dm_env import specs
 from gymnasium.spaces import Box
 
@@ -227,98 +226,40 @@ class Workshop:
         return self._replay_iter
 
     def _ts_to_obs_dict(self, time_step):
-        time_step = self._sanitize_time_step(time_step)
-        return {"pov": time_step.pov, "tof": time_step.tof}
-
-    def _sanitize_time_step(self, time_step):
-        """Coerce wrapped env outputs to the exact shapes/dtypes expected downstream."""
         pov = np.asarray(time_step.pov, dtype=np.uint8)
-        if pov.ndim != 3:
-            raise RuntimeError(f"pov must be 3D, got shape {pov.shape}")
-        if pov.shape == (self.img_h_size, self.img_w_size, self.in_channels):
-            pov = np.transpose(pov, (2, 0, 1))
-        elif pov.shape != (self.in_channels, self.img_h_size, self.img_w_size):
-            raise RuntimeError(
-                f"pov expected {(self.in_channels, self.img_h_size, self.img_w_size)} or "
-                f"{(self.img_h_size, self.img_w_size, self.in_channels)}, got {pov.shape}"
-            )
-
         tof = np.asarray(time_step.tof, dtype=np.float32).reshape(-1)
-        if tof.size != 1:
-            raise RuntimeError(f"tof expected 1 element, got shape {np.asarray(time_step.tof).shape}")
-        tof = tof.reshape(1,)
+        if tof.shape != (1,):
+            tof = tof[:1].astype(np.float32, copy=False)
+        return {"pov": pov, "tof": tof}
 
-        action = getattr(time_step, "action", None)
-        if action is None:
-            action = np.zeros(self.action_dim, dtype=np.float32)
-        else:
-            action = np.asarray(action, dtype=np.float32).reshape(-1)
-            if action.size != self.action_dim:
-                raise RuntimeError(f"action expected {self.action_dim} elements, got shape {np.asarray(getattr(time_step, 'action')).shape}")
-
-        reward = getattr(time_step, "reward", None)
-        if reward is None:
-            reward = np.zeros(1, dtype=np.float32)
-        else:
-            reward = np.asarray(reward, dtype=np.float32).reshape(-1)
-            if reward.size != 1:
-                reward = reward[:1]
-            reward = reward.reshape(1,)
-
-        discount = getattr(time_step, "discount", None)
-        if discount is None:
-            base_discount = self.discount if not time_step.last() else 0.0
-            discount = np.array([base_discount], dtype=np.float32)
-        else:
-            discount = np.asarray(discount, dtype=np.float32).reshape(-1)
-            if discount.size != 1:
-                discount = discount[:1]
-            discount = discount.reshape(1,)
-
-        updates = dict(pov=pov, tof=tof, action=action, reward=reward, discount=discount)
-        if hasattr(time_step, "_replace"):
-            return time_step._replace(**updates)
-
-        for k, v in updates.items():
-            setattr(time_step, k, v)
-        return time_step
-
-    def _log_scalars(self, step=None, **metrics):
-        """Support either logger.log_metrics(dict, step) or logger.log(key, value, step)."""
-        step = self.global_step if step is None else int(step)
-        payload = {k: v for k, v in metrics.items() if v is not None}
-
-        if hasattr(self.logger, "log_metrics"):
-            self.logger.log_metrics(payload, step)
-            return
-
-        last_err = None
-        for key, value in payload.items():
-            try:
-                self.logger.log(key, value, step)
-            except Exception as e:
-                last_err = e
-                break
-        else:
-            return
-
-        raise RuntimeError(f"Logger interface mismatch: {last_err}")
+    def _log_scalars(self, step: int, **metrics):
+        clean = {}
+        for k, v in metrics.items():
+            if v is None:
+                continue
+            if hasattr(v, "item"):
+                try:
+                    v = v.item()
+                except Exception:
+                    pass
+            clean[str(k)] = v
+        self.logger.log(int(step), **clean)
 
     def eval(self):
         step, episode, total_reward = 0, 0, 0
         eval_until_episode = utils.Until(self.num_eval_episodes)
 
         while eval_until_episode(episode):
-            time_step = self._sanitize_time_step(self.eval_env.reset())
+            time_step = self.eval_env.reset()
             self.video_recorder.init(self.eval_env, enabled=(episode == 0))
             ep_reward = 0.0
             ep_len = 0
             while not time_step.last():
                 with torch.no_grad(), utils.eval_mode(self.agent):
                     action = self.agent.act(self._ts_to_obs_dict(time_step), self.global_step, eval_mode=True)
-                time_step = self._sanitize_time_step(self.eval_env.step(action))
+                time_step = self.eval_env.step(action)
                 self.video_recorder.record(self.eval_env)
-                r = float(time_step.reward[0])
+                r = float(np.asarray(time_step.reward, dtype=np.float32).reshape(-1)[0])
                 total_reward += r
                 ep_reward += r
                 step += 1
@@ -350,7 +291,7 @@ class Workshop:
         eval_every_step = utils.Every(self.eval_every_frames, self.action_repeat)
 
         episode_step, episode_reward = 0, 0.0
-        time_step = self._sanitize_time_step(self.train_env.reset())
+        time_step = self.train_env.reset()
         self.replay_storage.add(time_step)
 
         metrics = None
@@ -363,7 +304,7 @@ class Workshop:
                     self._log_scalars(
                         step=self.global_step,
                         frame=self.global_frame,
-                        fps=(episode_frame / max(elapsed_time, 1e-6)),
+                        fps=(episode_frame / elapsed_time),
                         total_time=total_time,
                         episode_reward=episode_reward,
                         episode_length=episode_frame,
@@ -371,7 +312,7 @@ class Workshop:
                         buffer_size=len(self.replay_storage),
                     )
 
-                time_step = self._sanitize_time_step(self.train_env.reset())
+                time_step = self.train_env.reset()
                 self.replay_storage.add(time_step)
                 episode_step, episode_reward = 0, 0.0
 
@@ -385,11 +326,9 @@ class Workshop:
 
             if not seed_until_step(self.global_step):
                 metrics = self.agent.update(self.replay_iter, self.global_step)
-                if isinstance(metrics, dict) and metrics:
-                    self._log_scalars(step=self.global_step, frame=self.global_frame, **metrics)
 
-            time_step = self._sanitize_time_step(self.train_env.step(action))
-            episode_reward += float(time_step.reward[0])
+            time_step = self.train_env.step(action)
+            episode_reward += float(np.asarray(time_step.reward, dtype=np.float32).reshape(-1)[0])
             self.replay_storage.add(time_step)
 
             episode_step += 1

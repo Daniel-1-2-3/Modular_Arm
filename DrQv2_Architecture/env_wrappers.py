@@ -21,10 +21,10 @@ class FrameStackWrapper:
 
     Input from ArmEnv:
       info["pov_obs"]: (H,W,3) uint8 RGB
-      info["tof_obs"]: float scalar (already normalized in ArmEnv)
+      info["tof_obs"]: (1,) float32 (already normalized in ArmEnv)
     Output in info["observation"]:
       dict:
-        "pov": (3*num_frames, H, W) float32 in [0,1]
+        "pov": (3*num_frames, H, W) uint8
         "tof": (1,) float32
     """
     def __init__(self, env: Any, num_frames: int):
@@ -44,9 +44,15 @@ class FrameStackWrapper:
                 self._frames.append(last)  # no copy
 
         stacked = np.concatenate(list(self._frames), axis=0)  # uint8 (3F,H,W)
+
+        # FIX: tof is already (1,) float32 from ArmEnv — pass it through
+        # without re-wrapping.  The old code did np.array([tof]) which
+        # turned (1,) into (1,1), breaking the replay buffer assertion.
+        tof_arr = np.asarray(tof, dtype=np.float32).reshape(1)
+
         info["observation"] = {
-            "pov": stacked,  # uint8
-            "tof": np.array([tof], dtype=np.float32),
+            "pov": stacked,    # uint8
+            "tof": tof_arr,    # (1,) float32
         }
         
         return info

@@ -40,14 +40,14 @@ class Workshop:
         buffer_size: int = 100_000,
         total_timesteps: int = 500_000,
         learning_starts: int = 10_000,
-        num_expl_steps: int = 5_000,
+        num_expl_steps: int = 2_000,
         episode_horizon: int = 300,
         batch_size: int = 64,
         critic_target_tau: float = 0.001,
         update_every_steps: int = 2,
         update_mvmae_every_steps: int = 10,
-        stddev_schedule: str = 'linear(1.0,0.1,500000)',
-        stddev_clip: float = 0.3,
+        stddev_schedule: str = 'linear(0.5,0.1,250000)',
+        stddev_clip: float = 0.2,
         lr: float = 1e-4,
         discount: float = 0.99,
         action_repeat: int = 2, # keep >1 to reduce single-frame twitching and help latency robustness
@@ -226,24 +226,7 @@ class Workshop:
         return self._replay_iter
 
     def _ts_to_obs_dict(self, time_step):
-        pov = np.asarray(time_step.pov, dtype=np.uint8)
-        tof = np.asarray(time_step.tof, dtype=np.float32).reshape(-1)
-        if tof.shape != (1,):
-            tof = tof[:1].astype(np.float32, copy=False)
-        return {"pov": pov, "tof": tof}
-
-    def _log_scalars(self, step: int, **metrics):
-        clean = {}
-        for k, v in metrics.items():
-            if v is None:
-                continue
-            if hasattr(v, "item"):
-                try:
-                    v = v.item()
-                except Exception:
-                    pass
-            clean[str(k)] = v
-        self.logger.log(int(step), **clean)
+        return {"pov": time_step.pov, "tof": time_step.tof}
 
     def eval(self):
         step, episode, total_reward = 0, 0, 0
@@ -259,14 +242,14 @@ class Workshop:
                     action = self.agent.act(self._ts_to_obs_dict(time_step), self.global_step, eval_mode=True)
                 time_step = self.eval_env.step(action)
                 self.video_recorder.record(self.eval_env)
-                r = float(np.asarray(time_step.reward, dtype=np.float32).reshape(-1)[0])
+                r = float(time_step.reward[0])
                 total_reward += r
                 ep_reward += r
                 step += 1
                 ep_len += 1
 
-            self._log_scalars(
-                step=self.global_step,
+            self.logger.log(
+                self.global_step,
                 frame=self.global_frame,
                 eval_episode=episode,
                 eval_episode_reward=ep_reward,
@@ -277,8 +260,8 @@ class Workshop:
             episode += 1
             self.video_recorder.save(f'{self.global_frame}.mp4')
 
-        self._log_scalars(
-            step=self.global_step,
+        self.logger.log(
+            self.global_step,
             frame=self.global_frame,
             eval_episode_reward_mean=(total_reward / episode),
             eval_episode_length_mean=(step * self.action_repeat / episode),
@@ -301,8 +284,8 @@ class Workshop:
                 if metrics is not None:
                     elapsed_time, total_time = self.timer.reset()
                     episode_frame = episode_step * self.action_repeat
-                    self._log_scalars(
-                        step=self.global_step,
+                    self.logger.log(
+                        self.global_step,
                         frame=self.global_frame,
                         fps=(episode_frame / elapsed_time),
                         total_time=total_time,
@@ -317,7 +300,7 @@ class Workshop:
                 episode_step, episode_reward = 0, 0.0
 
             if eval_every_step(self.global_step):
-                self._log_scalars(step=self.global_step, frame=self.global_frame, eval_total_time=self.timer.total_time())
+                self.logger.log(self.global_step, frame=self.global_frame, eval_total_time=self.timer.total_time())
                 self.eval()
 
             t0 = time.perf_counter()
@@ -328,7 +311,7 @@ class Workshop:
                 metrics = self.agent.update(self.replay_iter, self.global_step)
 
             time_step = self.train_env.step(action)
-            episode_reward += float(np.asarray(time_step.reward, dtype=np.float32).reshape(-1)[0])
+            episode_reward += float(time_step.reward[0])
             self.replay_storage.add(time_step)
 
             episode_step += 1
@@ -369,14 +352,14 @@ def get_args():
     parser.add_argument("--buffer_size", type=int, default=100_000)
     parser.add_argument("--total_timesteps", type=int, default=500_000)
     parser.add_argument("--learning_starts", type=int, default=10_000)
-    parser.add_argument("--num_expl_steps", type=int, default=5000)
+    parser.add_argument("--num_expl_steps", type=int, default=2000)
     parser.add_argument("--episode_horizon", type=int, default=300)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--critic_target_tau", type=float, default=0.001)
     parser.add_argument("--update_every_steps", type=int, default=2)
     parser.add_argument("--update_mvmae_every_steps", type=int, default=10)
-    parser.add_argument("--stddev_schedule", type=str, default="linear(1.0,0.1,500000)")
-    parser.add_argument("--stddev_clip", type=float, default=0.3)
+    parser.add_argument("--stddev_schedule", type=str, default="linear(0.5,0.1,250000)")
+    parser.add_argument("--stddev_clip", type=float, default=0.2)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--discount", type=float, default=0.99)
     # FIX 6: default matches Workshop.__init__ default of 2

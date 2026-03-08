@@ -13,15 +13,27 @@ REF_H = 480.0
 TOF_H_M = 0.07
 CAM_PITCH_DEG = 8.0
 
-WHITE_MIN = 180
-WHITE_SPREAD = 65
-MIN_AREA = 600
-MIN_SIDE = 22
-MAX_AREA_FRAC = 1.0 # No max area
+# Grayscale detection for white cube on dark background
+# CLAHE boosts contrast; Otsu auto-thresholds; these are validation limits
+WHITE_GRAY_MIN = 170        # CHANGED: was 180 — catches dimmer cube faces
+WHITE_REGION_MEAN_MIN = 150 # minimum mean gray — raised after bg normalization (reflections land ~136)
+CLAHE_CLIP = 6.0            # CHANGED: was 3.0 — stronger local contrast
+CLAHE_GRID = (8, 8)         # CLAHE tile grid size
+GAMMA = 1.8                 # gamma > 1 crushes darks, preserves brights = more contrast
+MORPH_OPEN_K = 7            # kernel size for morphological opening to kill bright spots
+
+MIN_AREA = 600             # CHANGED: was 600 — detect cube at longer range
+MIN_SIDE = 15               # CHANGED: was 22 — allow smaller detections
+MAX_AREA_FRAC = 1.0         # No max area
 BORDER_MARGIN = 2
 
 # Stop when cube fills this fraction of the cropped frame
 STOP_FILL = 0.50
+
+# Dynamic bottom crop to exclude bright ground
+# At fill=0 crop this fraction off the bottom; at fill>=STOP_FILL crop nothing
+GROUND_CROP_MAX = 0.05     # max fraction of height to remove when cube is far
+GROUND_CROP_MIN = 0.0       # no crop when cube is close
 
 # Joint limits (radians / metres)
 J_MID_LO = 0.0
@@ -39,6 +51,12 @@ COL_EST = (0, 165, 255)
 COL_ERR_OK = (0, 220, 255)
 COL_ERR_BAD = (50, 50, 240)
 COL_MISS = (50, 50, 200)
+
+# Precompute gamma LUT
+_GAMMA_LUT = np.array([
+    np.clip(pow(i / 255.0, GAMMA) * 255.0, 0, 255)
+    for i in range(256)
+], dtype=np.uint8)
 
 
 class ColorDetectControl:
@@ -63,6 +81,10 @@ class ColorDetectControl:
         # Tracked joint positions
         self._mid_pos: float = 0.0
         self._end_pos: float = 0.0
+        # Last contrast-enhanced grayscale frame for display
+        self._last_gray_vis: np.ndarray | None = None
+        # Track fill for dynamic ground crop
+        self._last_fill: float = 0.0
 
     @property
     def is_stopped(self) -> bool:
@@ -84,7 +106,7 @@ class ColorDetectControl:
             return 0.5 if val >= 0 else -0.5
         return 1.0 if val >= 0.5 else (-1.0 if val <= -0.5 else (0.5 if val > 0 else -0.5))
 
-    def step(self, image_rgb: np.ndarray, tof_reading: float, env=None) -> np.ndarray:
+    def step(self, image_rgb: np.ndarray, tof_reading: float, step_num, env=None) -> np.ndarray:
         action = np.zeros(4, dtype=np.float32)
 
         if env is not None:
@@ -104,7 +126,9 @@ class ColorDetectControl:
 
         if det is None:
             cv2.putText(vis, "NO CUBE", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, COL_MISS, 2)
-            cv2.imshow("step", vis)
+            cv2.imshow("step", cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
+            if self._last_gray_vis is not None:
+                cv2.imshow("gray enhanced", self._last_gray_vis)
             cv2.waitKey(1)
             return action
 
@@ -139,11 +163,13 @@ class ColorDetectControl:
             cv2.putText(vis, txt, (10, 25 + i * 22), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 255, 200), 1, cv2.LINE_AA)
 
         cv2.imshow("step", cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
+        if self._last_gray_vis is not None:
+            cv2.imshow("gray enhanced", self._last_gray_vis)
         cv2.waitKey(1)
 
         # Stop condition
-        if fill >= STOP_FILL:
-            # self._stopped = True
+        if fill >= STOP_FILL and step_num > 50:
+            self._stopped = True
             return action
 
         # Alignment
@@ -180,8 +206,10 @@ class ColorDetectControl:
         # Advance based on fill fraction
         if fill < 0.10:
             action[3] = -1.0
-        elif fill < 0.25:
+        elif fill < 0.35:
             action[3] = -0.5
+        elif fill < STOP_FILL:
+            action[3] = -0.25
         else:
             action[3] = 0.0
 
@@ -196,14 +224,23 @@ class ColorDetectControl:
         return img[y0:y0 + side, x0:x0 + side], x0, y0
 
     @staticmethod
-    def _enhance(frame_bgr):
-        smoothed = cv2.bilateralFilter(frame_bgr, d=7, sigmaColor=50, sigmaSpace=50)
-        lab = cv2.cvtColor(smoothed, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-        l_min, l_max = l.min(), l.max()
-        if l_max > l_min:
-            l = ((l.astype(np.float32) - l_min) / (l_max - l_min) * 255).astype(np.uint8)
-        return cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
+    def _to_gray_enhanced(frame_bgr):
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        gray = cv2.bilateralFilter(gray, d=9, sigmaColor=75, sigmaSpace=75)
+        clahe = cv2.createCLAHE(clipLimit=CLAHE_CLIP, tileGridSize=CLAHE_GRID)
+        enhanced = clahe.apply(gray)
+        
+        # Find Otsu threshold to separate background from cube
+        otsu_thresh, _ = cv2.threshold(enhanced, 0, 255,
+                                    cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        
+        # Apply gamma ONLY to pixels below Otsu threshold (background)
+        # Cube pixels (above threshold) are left as-is
+        result = enhanced.copy()
+        bg_mask = enhanced < otsu_thresh
+        result[bg_mask] = _GAMMA_LUT[enhanced[bg_mask]]
+        
+        return result
 
     @staticmethod
     def _focal(w_img, h_img):
@@ -237,25 +274,26 @@ class ColorDetectControl:
         n = len(cv2.approxPolyDP(cnt, 0.04 * peri, True))
         if 3 <= n <= 6: return 1.0
         if n == 7: return 0.7
+        if n == 8: return 0.5      # CHANGED: was rejected — allow octagons (rounded cube)
         return 0.0
 
     @staticmethod
-    def _is_white_region(frame_bgr, cnt):
-        mask = np.zeros(frame_bgr.shape[:2], dtype=np.uint8)
+    def _is_white_region(gray_enhanced, cnt):
+        """Validate contour is bright on the contrast-enhanced grayscale."""
+        mask = np.zeros(gray_enhanced.shape[:2], dtype=np.uint8)
         cv2.drawContours(mask, [cnt], -1, 255, -1)
         if cv2.countNonZero(mask) < 10:
             return False
-        b, g, r = cv2.mean(frame_bgr, mask=mask)[:3]
-        if min(r, g, b) < 130:
+        roi = gray_enhanced[mask > 0]
+        # Mean brightness must be high
+        if np.mean(roi) < WHITE_REGION_MEAN_MIN:
             return False
-        if max(r, g, b) - min(r, g, b) > 65:
-            return False
-        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-        if np.std(gray[mask > 0]) > 35:
+        # CHANGED: was 55 — allow more lighting gradient across cube face
+        if np.std(roi) > 70:
             return False
         return True
 
-    def _score_contour(self, cnt, frame_area, w_img, h_img, frame_bgr=None):
+    def _score_contour(self, cnt, frame_area, w_img, h_img, gray_enhanced=None):
         area = cv2.contourArea(cnt)
         if area < MIN_AREA or area > frame_area * MAX_AREA_FRAC:
             return None
@@ -278,32 +316,37 @@ class ColorDetectControl:
         rext = area / (rw * rh) if rw > 1e-6 and rh > 1e-6 else 0.0
         poly = self._poly_score(cnt)
 
+        # CHANGED: relaxed geometry thresholds throughout
         if not tb:
-            if sq < 0.70 or rsq < 0.70 or sol < 0.88 or ext < 0.70 or rext < 0.55 or poly < 0.7:
-                return None
+            sol_thresh = 0.70 if area > frame_area * 0.15 else 0.82  # was 0.75 / 0.88
+            if sq < 0.55 or rsq < 0.55 or sol < sol_thresh or ext < 0.55 or rext < 0.45 or poly < 0.5:
+                return None  # was 0.70/0.70/sol/0.70/0.55/0.7
         else:
-            if sq < 0.40 or sol < 0.70 or ext < 0.35 or poly < 0.5:
-                return None
+            if sq < 0.30 or sol < 0.60 or ext < 0.30 or poly < 0.3:
+                return None  # was 0.40/0.70/0.35/0.5
 
-        if frame_bgr is not None and not self._is_white_region(frame_bgr, cnt):
+        if gray_enhanced is not None and not self._is_white_region(gray_enhanced, cnt):
             return None
 
         psize = self._pixel_size(cnt, bbox=(x, y, w, h), touches_border=tb)
         score = 2.0 * max(sq, rsq) + 1.5 * sol + 1.0 * max(ext, rext) + 0.8 * poly + 0.002 * psize
         return score, x + w / 2.0, y + h / 2.0, psize, (x, y, w, h)
 
-    def _best_from_mask(self, frame_bgr, mask):
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+    def _best_from_mask(self, gray_enhanced, mask):
+        # Large opening kernel removes small bright spots from high contrast
+        kern_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
+                                              (MORPH_OPEN_K, MORPH_OPEN_K))
+        kern_close = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kern_open, iterations=1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kern_close, iterations=2)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             return None
-        h_img, w_img = frame_bgr.shape[:2]
+        h_img, w_img = gray_enhanced.shape[:2]
         fa = h_img * w_img
         best_s, best_r = -1.0, None
         for cnt in contours:
-            res = self._score_contour(cnt, fa, w_img, h_img, frame_bgr=frame_bgr)
+            res = self._score_contour(cnt, fa, w_img, h_img, gray_enhanced=gray_enhanced)
             if res is None:
                 continue
             s, cx, cy, ps, bb = res
@@ -311,30 +354,66 @@ class ColorDetectControl:
                 best_s, best_r = s, (cx, cy, ps, bb)
         return best_r
 
-    def _detect(self, frame_bgr):
-        b, g, r = cv2.split(frame_bgr)
-        bright = (r >= WHITE_MIN) & (g >= WHITE_MIN) & (b >= WHITE_MIN)
-        ch_max = np.maximum(np.maximum(r, g), b)
-        ch_min = np.minimum(np.minimum(r, g), b)
-        spread = (ch_max.astype(np.int16) - ch_min.astype(np.int16)) <= WHITE_SPREAD
-        mask1 = (bright & spread).astype(np.uint8) * 255
-        det = self._best_from_mask(frame_bgr, mask1)
+    def _detect(self, gray_enhanced):
+        """Detect white cube on contrast-enhanced grayscale.
+        
+        Primary: Otsu auto-threshold (best for bimodal dark-bg / white-cube).
+        Fallback: fixed bright threshold.
+        """
+        # Primary: Otsu thresholding — finds optimal split automatically
+        _, mask_otsu = cv2.threshold(gray_enhanced, 0, 255,
+                                     cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        det = self._best_from_mask(gray_enhanced, mask_otsu)
         if det is not None:
             return det
-        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-        adapt = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        # Fallback: fixed high-brightness threshold
+        _, mask_fixed = cv2.threshold(gray_enhanced, WHITE_GRAY_MIN, 255,
+                                      cv2.THRESH_BINARY)
+        det = self._best_from_mask(gray_enhanced, mask_fixed)
+        if det is not None:
+            return det
+        # Last resort: adaptive threshold
+        adapt = cv2.adaptiveThreshold(gray_enhanced, 255,
+                                      cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                       cv2.THRESH_BINARY, blockSize=51, C=-15)
-        return self._best_from_mask(frame_bgr, adapt)
+        return self._best_from_mask(gray_enhanced, adapt)
+
+    def _ground_crop_frac(self) -> float:
+        """Fraction of height to crop from bottom, based on last fill."""
+        t = min(self._last_fill / STOP_FILL, 1.0)
+        return GROUND_CROP_MAX + (GROUND_CROP_MIN - GROUND_CROP_MAX) * t
 
     def _detect_full(self, frame_bgr_full):
-        cropped, x_off, y_off = self._center_crop_square(frame_bgr_full)
-        enhanced = self._enhance(cropped)
-        det = self._detect(enhanced)
-        if det is None:
-            det = self._detect(cropped)
+        h_full, w_full = frame_bgr_full.shape[:2]
+
+        # Dynamic bottom crop — remove bright ground
+        crop_frac = self._ground_crop_frac()
+        crop_rows = int(h_full * crop_frac)
+        if crop_rows > 0:
+            frame_cropped = frame_bgr_full[:h_full - crop_rows, :]
+        else:
+            frame_cropped = frame_bgr_full
+
+        cropped, x_off, y_off = self._center_crop_square(frame_cropped)
+        gray_enh = self._to_gray_enhanced(cropped)
+
+        # Store full-frame enhanced grayscale for display (with crop line)
+        full_gray = self._to_gray_enhanced(frame_bgr_full)
+        # Draw crop line on display frame
+        if crop_rows > 0:
+            cv2.line(full_gray, (0, h_full - crop_rows),
+                     (w_full, h_full - crop_rows), 128, 1)
+        self._last_gray_vis = full_gray
+
+        det = self._detect(gray_enh)
         if det is None:
             return None
         cx, cy, ps, (bx, by, bw, bh) = det
+
+        # Update fill tracker
+        side = min(frame_cropped.shape[:2])
+        self._last_fill = ps / side if side > 0 else 0.0
+
         return (cx + x_off, cy + y_off, ps, (bx + x_off, by + y_off, bw, bh))
 
     def _backproject(self, cx, cy, dist, fx, fy, cx_img, cy_img):
@@ -503,7 +582,7 @@ class ColorDetectControl:
             (f"Err:  {est_err:+.4f}m" if math.isfinite(est_err) else "Err:  ---",
              COL_ERR_OK if math.isfinite(est_err) and abs(est_err) < 0.03 else COL_ERR_BAD),
             (f"H_err: {h_err_str}  V_err: {v_err_str}  align: {align_str}", (255, 200, 0)),
-            (f"Fill: {fill:.0%} [{status}]", (200, 255, 200)),
+            (f"Fill: {fill:.0%} [{status}]  crop:{self._ground_crop_frac():.0%}", (200, 255, 200)),
             (f"mid_pos: {math.degrees(self._mid_pos):.1f}deg  hdroom:{mid_pct:.0f}%{mid_tag}", mid_col),
         ]
 
@@ -526,6 +605,13 @@ class ColorDetectControl:
 
         cv2_rendering_frame = np.concatenate([pov_vis, scene_small], axis=1)
         cv2.imshow("cv2 rendering frame", cv2_rendering_frame)
+        if self._last_gray_vis is not None:
+            gray_display = cv2.resize(
+                self._last_gray_vis,
+                (w_img * pov_scale, h_img * pov_scale),
+                interpolation=cv2.INTER_NEAREST,
+            )
+            cv2.imshow("gray enhanced", gray_display)
 
 
 def run(args):
@@ -557,7 +643,7 @@ def run(args):
         tof_m = float(env.last_tof_m)
 
         # Pass env so ctrl can read joint positions for limit detection
-        action = ctrl.step(image_rgb, tof_m, env=env)
+        action = ctrl.step(image_rgb, tof_m, step_count, env=env)
         result = env.step(action)
         step_count += 1
 

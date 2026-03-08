@@ -11,11 +11,10 @@ from color_detect_control import ColorDetectControl
 SERVO_MIN = 0
 SERVO_MAX = 270
 MID_NEUTRAL = 15
-END_NEUTRAL = 200
+END_NEUTRAL = 190
 
 latest_frame = None
 frame_lock = threading.Lock()
-
 
 def on_message(client, userdata, message):
     global latest_frame
@@ -38,7 +37,7 @@ def clamp(val):
 def pub(client, topic, payload_dict):
     payload = json.dumps(payload_dict)
     client.publish(topic, payload)
-    print(f"  → {topic}  {payload}")
+    # print(f"  {topic}  {payload}")
 
 def move_base(client, increment):
     pub(client, "robot1/motor", {"degrees": -increment})
@@ -68,7 +67,7 @@ def reset(client):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Arm controller")
-    parser.add_argument("--broker", default="192.168.40.65")
+    parser.add_argument("--broker", default="192.168.40.44")
     parser.add_argument("--port", type=int, default=1883)
     args = parser.parse_args()
 
@@ -83,6 +82,7 @@ if __name__ == "__main__":
     mid_angle, end_angle = reset(client)
     ctrl = ColorDetectControl()
 
+    step_num = 0
     while True:
         with frame_lock:
             frame = latest_frame
@@ -90,10 +90,11 @@ if __name__ == "__main__":
         if frame is None:
             time.sleep(0.05)
             continue
-
+        
         tof_reading = float("nan") # Inputs, but doesn't actualy use the tof
-        action = ctrl.step(frame, tof_reading)
-        print(f"  action - base:{action[0]:+.1f}  mid:{action[1]:+.1f}  end:{action[2]:+.1f}  rail:{action[3]:+.1f}")
+        action = ctrl.step(frame, tof_reading, step_num)
+        step_num += 1
+        # print(f"  action - base:{action[0]:+.1f}  mid:{action[1]:+.1f}  end:{action[2]:+.1f}  rail:{action[3]:+.1f}")
 
         move_base(client, float(action[0]))
         drive(client, float(action[3]))

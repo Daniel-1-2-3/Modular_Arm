@@ -13,18 +13,18 @@ REF_H = 480.0
 TOF_H_M = 0.07
 CAM_PITCH_DEG = 8.0
 
-WHITE_MIN = 160
-WHITE_SPREAD = 40
+WHITE_MIN = 180
+WHITE_SPREAD = 65
 MIN_AREA = 600
 MIN_SIDE = 22
-MAX_AREA_FRAC = 0.25
+MAX_AREA_FRAC = 1.0 # No max area
 BORDER_MARGIN = 2
 
 # Stop when cube fills this fraction of the cropped frame
-STOP_FILL = 0.40
+STOP_FILL = 0.50
 
 # Joint limits (radians / metres)
-J_MID_LO = 0.0 
+J_MID_LO = 0.0
 J_MID_HI = 25.0 / 180.0 * math.pi
 J_END_LO = -90.0 / 180.0 * math.pi
 J_END_HI = 110.0 / 180.0 * math.pi
@@ -39,6 +39,7 @@ COL_EST = (0, 165, 255)
 COL_ERR_OK = (0, 220, 255)
 COL_ERR_BAD = (50, 50, 240)
 COL_MISS = (50, 50, 200)
+
 
 class ColorDetectControl:
     """
@@ -89,7 +90,6 @@ class ColorDetectControl:
         if env is not None:
             try:
                 qpos = env.data.qpos
-                # Indices: 0=drive, 1=base, 2=mid, 3=end
                 self._mid_pos = float(qpos[2])
                 self._end_pos = float(qpos[3])
             except Exception:
@@ -99,27 +99,60 @@ class ColorDetectControl:
         bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
         det = self._detect_full(bgr)
 
+        # Build display frame
+        vis = bgr.copy()
+
         if det is None:
+            cv2.putText(vis, "NO CUBE", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, COL_MISS, 2)
+            cv2.imshow("step", vis)
+            cv2.waitKey(1)
             return action
 
-        cube_cx, cube_cy, psize, _ = det
+        cube_cx, cube_cy, psize, (bx, by, bw, bh) = det
         fill = psize / min(h_img, w_img)
+
+        # Draw bounding box
+        cv2.rectangle(vis, (bx, by), (bx + bw, by + bh), COL_BOX, 2)
+
+        # Draw cube center crosshair
+        cx, cy = int(cube_cx), int(cube_cy)
+        cv2.line(vis, (cx - 8, cy), (cx + 8, cy), COL_X, 1)
+        cv2.line(vis, (cx, cy - 8), (cx, cy + 8), COL_X, 1)
+
+        # Draw target crosshair
+        tx, ty = int(w_img / 2), int(h_img * 0.7)
+        cv2.line(vis, (tx - 8, ty), (tx + 8, ty), (0, 180, 255), 1)
+        cv2.line(vis, (tx, ty - 8), (tx, ty + 8), (0, 180, 255), 1)
+
+        # Line from target to cube
+        cv2.line(vis, (tx, ty), (cx, cy), (0, 180, 255), 1)
+
+        # HUD text
+        h_err_frac = (cube_cx - w_img / 2.0) / (w_img / 2.0)
+        v_err_frac = (cube_cy - h_img * 0.7) / (h_img / 2.0)
+        status = "STOPPED" if self._stopped else "active"
+        lines = [
+            f"Fill: {fill:.0%} [{status}]",
+            f"H_err: {h_err_frac:+.2f}  V_err: {v_err_frac:+.2f}",
+        ]
+        for i, txt in enumerate(lines):
+            cv2.putText(vis, txt, (10, 25 + i * 22), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 255, 200), 1, cv2.LINE_AA)
+
+        cv2.imshow("step", cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
+        cv2.waitKey(1)
 
         # Stop condition
         if fill >= STOP_FILL:
-            self._stopped = True
+            # self._stopped = True
             return action
 
         # Alignment
-        h_err_frac = (cube_cx - w_img / 2.0) / (w_img / 2.0) # +ve cube right
-        v_err_frac = (cube_cy - h_img * 0.7) / (h_img / 2.0) # +ve cube below target
-
-        H_DEADZONE = 0.06 # horizontal error below base stays still
-        V_DEADZONE = 0.06 # vertical error below arm stays still
+        H_DEADZONE = 0.06
+        V_DEADZONE = 0.06
 
         if abs(h_err_frac) >= H_DEADZONE:
             action[0] = self._snap_nonzero(-h_err_frac)
-        
+
         mid_range = J_MID_HI - J_MID_LO
         end_range = J_END_HI - J_END_LO
         mid_near_lo = (self._mid_pos - J_MID_LO) < MID_LIMIT_THRESH * mid_range
@@ -131,7 +164,6 @@ class ColorDetectControl:
             need_to_raise = v_err_frac < 0
             need_to_lower = v_err_frac > 0
 
-            # Determine which joints are blocked/limited for this direction
             mid_blocked = (need_to_raise and mid_near_lo) or (need_to_lower and mid_near_hi)
             end_blocked = (need_to_raise and end_near_lo) or (need_to_lower and end_near_hi)
 
@@ -145,14 +177,13 @@ class ColorDetectControl:
                 action[1] = self._snap_nonzero(v_err_frac)
                 action[2] = self._snap(v_err_frac * 0.4)
 
-        fg, _, _ = self._focal(w_img, h_img)
-        distance = (CUBE_SIZE_M * fg) / psize if psize > 0 else float("nan")
-        tof_val = float(tof_reading) if (math.isfinite(float(tof_reading)) and float(tof_reading) > 0) else distance
-
-        if math.isfinite(tof_val) and tof_val > 0.06:
-            action[3] = -1.0 if tof_val > 0.20 else -0.5
-        else:
+        # Advance based on fill fraction
+        if fill < 0.10:
+            action[3] = -1.0
+        elif fill < 0.25:
             action[3] = -0.5
+        else:
+            action[3] = 0.0
 
         return action
 
@@ -217,7 +248,7 @@ class ColorDetectControl:
         b, g, r = cv2.mean(frame_bgr, mask=mask)[:3]
         if min(r, g, b) < 130:
             return False
-        if max(r, g, b) - min(r, g, b) > 50:
+        if max(r, g, b) - min(r, g, b) > 65:
             return False
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
         if np.std(gray[mask > 0]) > 35:
@@ -309,7 +340,7 @@ class ColorDetectControl:
     def _backproject(self, cx, cy, dist, fx, fy, cx_img, cy_img):
         nx = (cx - cx_img) / fx
         ny = (cy - cy_img) / fy
-        rl = math.sqrt(nx**2 + ny**2 + 1.0)
+        rl = math.sqrt(nx ** 2 + ny ** 2 + 1.0)
         z = dist / rl
         return nx * z, ny * z, z
 
@@ -328,7 +359,7 @@ class ColorDetectControl:
         dx, dy, dz = xc, yc - TOF_H_M, zc
         dyt = dy * math.cos(pr) + dz * math.sin(pr)
         dzt = -dy * math.sin(pr) + dz * math.cos(pr)
-        return float(math.sqrt(dx**2 + dyt**2 + dzt**2))
+        return float(math.sqrt(dx ** 2 + dyt ** 2 + dzt ** 2))
 
     def get_angles(self, image_rgb):
         h, w = image_rgb.shape[:2]
@@ -408,7 +439,7 @@ class ColorDetectControl:
 
         # Crosshair
         tx = int(w_img * 0.5 * pov_scale)
-        ty = int(h_img * 0.75 * pov_scale)
+        ty = int(h_img * 0.60 * pov_scale)
         cv2.line(pov_vis, (tx - 10, ty), (tx + 10, ty), (0, 180, 255), 1)
         cv2.line(pov_vis, (tx, ty - 10), (tx, ty + 10), (0, 180, 255), 1)
 
@@ -441,7 +472,7 @@ class ColorDetectControl:
             cv2.line(pov_vis, (tx, ty), (cxp, cyp), (0, 180, 255), 1)
 
             h_err = (cube_cx - w_img / 2.0) / (w_img / 2.0)
-            v_err = (cube_cy - h_img * 0.75) / (h_img / 2.0)
+            v_err = (cube_cy - h_img * 0.60) / (h_img / 2.0)
 
             h_err_str = f"{h_err:+.2f}"
             v_err_str = f"{v_err:+.2f}"
@@ -469,7 +500,8 @@ class ColorDetectControl:
             (f"True: {true_dist:.4f}m", COL_TOF),
             (f"ToF:  {tof_dist:.4f}m" if math.isfinite(tof_dist) else "ToF: ---", (200, 200, 0)),
             (f"Est:  {est_dist:.4f}m" if math.isfinite(est_dist) else "Est: ---", COL_EST),
-            (f"Err:  {est_err:+.4f}m" if math.isfinite(est_err) else "Err:  ---", COL_ERR_OK if math.isfinite(est_err) and abs(est_err) < 0.03 else COL_ERR_BAD),
+            (f"Err:  {est_err:+.4f}m" if math.isfinite(est_err) else "Err:  ---",
+             COL_ERR_OK if math.isfinite(est_err) and abs(est_err) < 0.03 else COL_ERR_BAD),
             (f"H_err: {h_err_str}  V_err: {v_err_str}  align: {align_str}", (255, 200, 0)),
             (f"Fill: {fill:.0%} [{status}]", (200, 255, 200)),
             (f"mid_pos: {math.degrees(self._mid_pos):.1f}deg  hdroom:{mid_pct:.0f}%{mid_tag}", mid_col),
@@ -477,7 +509,7 @@ class ColorDetectControl:
 
         for i, (txt, col) in enumerate(rows):
             cv2.putText(pov_vis, txt, (4, gap + i * gap), font, fs, col, th, cv2.LINE_AA)
-            
+
         scene_small = cv2.resize(
             scene_bgr,
             (scene_bgr.shape[1] // scene_div, scene_bgr.shape[0] // scene_div),
@@ -495,15 +527,15 @@ class ColorDetectControl:
         cv2_rendering_frame = np.concatenate([pov_vis, scene_small], axis=1)
         cv2.imshow("cv2 rendering frame", cv2_rendering_frame)
 
+
 def run(args):
     env = ArmEnv(
         xml_path=str(Path("Simulation") / "Assets" / "scene.xml"),
         width=args.img_w, height=args.img_h,
         display=False, discount=0.99,
         episode_horizon=args.episode_horizon,
-        enable_domain_randomization=args.domain_rand,
     )
-    
+
     ctrl = ColorDetectControl()
     step_count = 0
 
@@ -517,7 +549,7 @@ def run(args):
     while True:
         ctrl.run_sim(env, pov_scale=args.pov_scale, scene_div=args.scene_div)
         key = cv2.waitKey(args.delay_ms) & 0xFF
-        if key in (ord("q"), 27): 
+        if key in (ord("q"), 27):
             break
 
         env._gl_ctx.make_current()
@@ -535,7 +567,7 @@ def run(args):
             while True:
                 ctrl.run_sim(env, pov_scale=args.pov_scale, scene_div=args.scene_div)
                 k = cv2.waitKey(100) & 0xFF
-                if k in (ord("q"), 27): 
+                if k in (ord("q"), 27):
                     cv2.destroyAllWindows()
                     return
 

@@ -2,9 +2,9 @@ import math
 import numpy as np
 import cv2
 import mujoco
+from pathlib import Path
 from Arm_Env.arm_env import ArmEnv
-
-# ── Constants ─────────────────────────────────────────────────────────────────
+import argparse
 
 CUBE_SIZE_M = 0.04
 REF_FOCAL = 608.0
@@ -13,7 +13,6 @@ REF_H = 480.0
 TOF_H_M = 0.07
 CAM_PITCH_DEG = 8.0
 
-# Detection
 WHITE_MIN = 160
 WHITE_SPREAD = 40
 MIN_AREA = 600
@@ -24,13 +23,13 @@ BORDER_MARGIN = 2
 # Stop when cube fills this fraction of the cropped frame
 STOP_FILL = 0.40
 
-# Joint limits (radians / metres) — from ArmEnv limits_by_name
-J_MID_LO  =  0.0                  # j_b_mid lower limit
-J_MID_HI  =  25.0 / 180.0 * math.pi   # j_b_mid upper limit  (~0.436 rad)
-J_END_LO  = -90.0 / 180.0 * math.pi   # j_c_end lower limit
-J_END_HI  = 110.0 / 180.0 * math.pi   # j_c_end upper limit
-# Fraction of range remaining below which mid is considered "at limit"
-MID_LIMIT_THRESH = 0.10           # 10% of mid's total range
+# Joint limits (radians / metres)
+J_MID_LO = 0.0 
+J_MID_HI = 25.0 / 180.0 * math.pi
+J_END_LO = -90.0 / 180.0 * math.pi
+J_END_HI = 110.0 / 180.0 * math.pi
+# Fraction of range remaining below which mid is considered at limit
+MID_LIMIT_THRESH = 0.10
 
 # Display
 COL_BOX = (0, 255, 0)
@@ -41,60 +40,36 @@ COL_ERR_OK = (0, 220, 255)
 COL_ERR_BAD = (50, 50, 240)
 COL_MISS = (50, 50, 200)
 
-
 class ColorDetectControl:
     """
-    Always-incremental vision controller.
+    Control sign conventions for transfer:
 
-    Control sign conventions (derived from sanity_check.py):
-      All joints are negated internally by the env — a positive action value
-      applies a negative delta in joint space.  Physical directions:
-
-        action[0] > 0  →  base rotates in -radian direction  (e.g. right)
-        action[0] < 0  →  base rotates in +radian direction  (e.g. left)
-
-        action[1] > 0  →  mid joint moves in -radian direction  (arm down)
-        action[1] < 0  →  mid joint moves in +radian direction  (arm up)
-
-        action[2] > 0  →  end-effector moves in -radian direction  (tip down)
-        action[2] < 0  →  end-effector moves in +radian direction  (tip up)
-
-        action[3] > 0  →  rail moves in -metre direction  (backward)
-        action[3] < 0  →  rail moves in +metre direction  (forward / advance)
-
-    Usage:
-        ctrl = ColorDetectControl()
-        ctrl.reset()
-        # pass env so joint positions are available for limit detection:
-        action = ctrl.step(image_rgb, tof_m, env=env)
+        action[0] > 0: base rotates in -radian direction  (e.g. right)
+        action[0] < 0: base rotates in +radian direction  (e.g. left)
+        action[1] > 0: mid joint moves in -radian direction  (arm down)
+        action[1] < 0: mid joint moves in +radian direction  (arm up)
+        action[2] > 0: end-effector moves in -radian direction  (tip down)
+        action[2] < 0: end-effector moves in +radian direction  (tip up)
+        action[3] > 0: rail moves in -metre direction  (backward)
+        action[3] < 0: rail moves in +metre direction  (forward / advance)
     """
 
     def __init__(self):
         self.reset()
 
     def reset(self):
-        """Call on episode start."""
         self._stopped = False
-        # Tracked joint positions (updated each step when env is provided)
-        self._mid_pos: float = 0.0   # j_b_mid current position (rad)
-        self._end_pos: float = 0.0   # j_c_end current position (rad)
+        # Tracked joint positions
+        self._mid_pos: float = 0.0
+        self._end_pos: float = 0.0
 
     @property
     def is_stopped(self) -> bool:
         return self._stopped
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # Public: main loop
-    # ══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def _snap(val: float, deadzone: float = 0.08) -> float:
-        """
-        Snap a float to {-1, -0.5, 0, 0.5, 1} with a deadzone.
-          |val| < deadzone          →  0.0   (true noise, do nothing)
-          deadzone <= |val| < 0.5   → ±0.5   (small correction)
-          |val| >= 0.5              → ±1.0   (large correction)
-        """
+        # Snap a float to {-1, -0.5, 0, 0.5, 1} with a deadzone
         if abs(val) < deadzone:
             return 0.0
         sign = 1.0 if val > 0 else -1.0
@@ -102,41 +77,15 @@ class ColorDetectControl:
 
     @staticmethod
     def _snap_nonzero(val: float, deadzone: float = 0.08) -> float:
-        """
-        Like _snap but NEVER returns 0 — used when we must always command
-        a joint (e.g. the primary alignment axis).
-        Collapses the deadzone to ±0.5 so tiny real errors still move.
-        """
+        # Snap, but not return 0
         if abs(val) < deadzone:
             # Error is small but real — use minimum step in correct direction
             return 0.5 if val >= 0 else -0.5
         return 1.0 if val >= 0.5 else (-1.0 if val <= -0.5 else (0.5 if val > 0 else -0.5))
 
-    def step(self, image_rgb: np.ndarray, tof_reading: float,
-             env=None) -> np.ndarray:
-        """
-        Feed camera frame (RGB uint8) + ToF (metres).
-        Optionally pass `env` so joint positions can be read for limit detection.
-        Returns (4,) float32 with each element in {-1, -0.5, 0, 0.5, 1}.
-
-        Rules:
-          - Per-joint deadzone: joints only move when error is meaningful.
-          - BUT: if horizontal OR vertical error exists above a minimum
-            threshold, at least the primary joint for that axis is guaranteed
-            non-zero — no all-zero stall while misaligned.
-          - Drive (action[3]) is always non-zero while fill < STOP_FILL.
-          - All axes run simultaneously (no sequential modes).
-          - If mid is at its limit for the needed direction, route to end; vice versa.
-
-        Sign conventions (DO NOT CHANGE):
-          action[0] < 0  →  base rotates left   |  action[0] > 0  → right
-          action[1] < 0  →  mid raises arm up   |  action[1] > 0  → down
-          action[2] < 0  →  end tip up          |  action[2] > 0  → down
-          action[3] < 0  →  drive forward       |  action[3] > 0  → backward
-        """
+    def step(self, image_rgb: np.ndarray, tof_reading: float, env=None) -> np.ndarray:
         action = np.zeros(4, dtype=np.float32)
 
-        # ── Read joint positions from env ──────────────────────────────
         if env is not None:
             try:
                 qpos = env.data.qpos
@@ -150,42 +99,27 @@ class ColorDetectControl:
         bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
         det = self._detect_full(bgr)
 
-        # Can't see cube — hold still
         if det is None:
             return action
 
         cube_cx, cube_cy, psize, _ = det
         fill = psize / min(h_img, w_img)
 
-        # Stop condition — zero action is intentional here
+        # Stop condition
         if fill >= STOP_FILL:
             self._stopped = True
             return action
 
-        # ── Pixel errors ───────────────────────────────────────────────
-        h_err_frac = (cube_cx - w_img / 2.0) / (w_img / 2.0)   # +ve → cube right
-        v_err_frac = (cube_cy - h_img * 0.7) / (h_img / 2.0)   # +ve → cube below target
+        # Alignment
+        h_err_frac = (cube_cx - w_img / 2.0) / (w_img / 2.0) # +ve cube right
+        v_err_frac = (cube_cy - h_img * 0.7) / (h_img / 2.0) # +ve cube below target
 
-        H_DEADZONE = 0.06   # horizontal error below this → base stays still
-        V_DEADZONE = 0.06   # vertical error below this → arm stays still
+        H_DEADZONE = 0.06 # horizontal error below base stays still
+        V_DEADZONE = 0.06 # vertical error below arm stays still
 
-        # ── action[0]: base horizontal centering ──────────────────────
-        # cube right (h_err > 0) → action[0] < 0  (keep current negation)
-        # Use _snap_nonzero so we never stall horizontally when misaligned
         if abs(h_err_frac) >= H_DEADZONE:
             action[0] = self._snap_nonzero(-h_err_frac)
-        # else: truly centred — leave at 0 (deadzone is intentional here)
-
-        # ── action[1]/[2]: vertical alignment with joint-limit fallback ─
-        # cube below target (v_err > 0) → need to look down → action > 0
-        # cube above target (v_err < 0) → need to raise     → action < 0
-        #
-        # Joint limit logic (signs as per env convention):
-        #   Raising arm  → action[1] < 0  (mid_pos decreases toward J_MID_LO)
-        #   Lowering arm → action[1] > 0  (mid_pos increases toward J_MID_HI)
-        #   mid_near_lo  → mid can't raise further; route to end
-        #   end_near_lo  → end can't raise further; route to mid
-        #   (symmetric for lower-limit on the upper side)
+        
         mid_range = J_MID_HI - J_MID_LO
         end_range = J_END_HI - J_END_LO
         mid_near_lo = (self._mid_pos - J_MID_LO) < MID_LIMIT_THRESH * mid_range
@@ -197,47 +131,30 @@ class ColorDetectControl:
             need_to_raise = v_err_frac < 0
             need_to_lower = v_err_frac > 0
 
-            # Determine which joints are blocked for this direction
+            # Determine which joints are blocked/limited for this direction
             mid_blocked = (need_to_raise and mid_near_lo) or (need_to_lower and mid_near_hi)
             end_blocked = (need_to_raise and end_near_lo) or (need_to_lower and end_near_hi)
 
             if mid_blocked and not end_blocked:
-                # Mid is at its limit — end does all the work (guaranteed non-zero)
                 action[1] = 0.0
                 action[2] = self._snap_nonzero(v_err_frac)
             elif end_blocked and not mid_blocked:
-                # End is at its limit — mid does all the work (guaranteed non-zero)
                 action[1] = self._snap_nonzero(v_err_frac)
                 action[2] = 0.0
             else:
-                # Both available: mid is the primary (guaranteed non-zero),
-                # end assists when error is large enough to clear its own deadzone
                 action[1] = self._snap_nonzero(v_err_frac)
-                action[2] = self._snap(v_err_frac * 0.4)   # may be 0 if error is small
-        # else: within vertical deadzone — leave both at 0 (intentional)
+                action[2] = self._snap(v_err_frac * 0.4)
 
-        # ── action[3]: drive — always forward, never zero ──────────────
-        # action[3] < 0 = forward.  Far → full speed, close → half speed.
         fg, _, _ = self._focal(w_img, h_img)
         distance = (CUBE_SIZE_M * fg) / psize if psize > 0 else float("nan")
-        tof_val = float(tof_reading) if (math.isfinite(float(tof_reading))
-                                         and float(tof_reading) > 0) else distance
+        tof_val = float(tof_reading) if (math.isfinite(float(tof_reading)) and float(tof_reading) > 0) else distance
 
         if math.isfinite(tof_val) and tof_val > 0.06:
             action[3] = -1.0 if tof_val > 0.20 else -0.5
         else:
-            action[3] = -0.5   # no range info — creep forward
+            action[3] = -0.5
 
         return action
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # Action clamping
-    # ══════════════════════════════════════════════════════════════════════════
-
-    @staticmethod
-    # ══════════════════════════════════════════════════════════════════════════
-    # Vision: preprocessing
-    # ══════════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def _center_crop_square(img):
@@ -256,10 +173,6 @@ class ColorDetectControl:
         if l_max > l_min:
             l = ((l.astype(np.float32) - l_min) / (l_max - l_min) * 255).astype(np.uint8)
         return cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # Vision: detection internals
-    # ══════════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def _focal(w_img, h_img):
@@ -393,10 +306,6 @@ class ColorDetectControl:
         cx, cy, ps, (bx, by, bw, bh) = det
         return (cx + x_off, cy + y_off, ps, (bx + x_off, by + y_off, bw, bh))
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # Vision: geometry
-    # ══════════════════════════════════════════════════════════════════════════
-
     def _backproject(self, cx, cy, dist, fx, fy, cx_img, cy_img):
         nx = (cx - cx_img) / fx
         ny = (cy - cy_img) / fy
@@ -451,10 +360,6 @@ class ColorDetectControl:
             return 0.0
         return det[2] / side
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # Utilities
-    # ══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def physics_distance_m(env) -> float:
         sid = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_SITE, "tof_site")
@@ -463,100 +368,186 @@ class ColorDetectControl:
             return float("nan")
         return float(np.linalg.norm(env.data.xpos[cid] - env.data.site_xpos[sid]))
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # Display
-    # ══════════════════════════════════════════════════════════════════════════
-
     def run_sim(self, env: ArmEnv, pov_scale: int = 1, scene_div: int = 2):
         env._gl_ctx.make_current()
-        raw_rgb = env._render_fixedcam(env._mjv_cam_pov)
-        raw_bgr = cv2.cvtColor(raw_rgb, cv2.COLOR_RGB2BGR)
-        h_img, w_img = raw_bgr.shape[:2]
 
+        pov_rgb = env._render_fixedcam(env._mjv_cam_pov)
+        pov_bgr = cv2.cvtColor(pov_rgb, cv2.COLOR_RGB2BGR)
+
+        scene_rgb = env._render_fixedcam(env._mjv_cam_scene)
+        scene_bgr = cv2.cvtColor(scene_rgb, cv2.COLOR_RGB2BGR)
+        env._draw_hud(scene_bgr)
+
+        h_img, w_img = pov_bgr.shape[:2]
         true_dist = self.physics_distance_m(env)
         tof_dist = float(env.last_tof_m)
-        det = self._detect_full(raw_bgr)
+        det = self._detect_full(pov_bgr)
 
-        s = pov_scale
-        vis = cv2.resize(raw_bgr, (w_img * s, h_img * s), interpolation=cv2.INTER_NEAREST)
-        H, W = vis.shape[:2]
-        font, fs, th, gap = cv2.FONT_HERSHEY_SIMPLEX, 0.42, 1, 17
+        pov_vis = cv2.resize(
+            pov_bgr,
+            (w_img * pov_scale, h_img * pov_scale),
+            interpolation=cv2.INTER_NEAREST,
+        )
+        H, W = pov_vis.shape[:2]
 
-        # Draw crop region
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        fs, th, gap = 0.42, 1, 17
+
         side = min(h_img, w_img)
-        cx0 = (w_img - side) // 2
-        cy0 = (h_img - side) // 2
-        cv2.rectangle(vis, (cx0 * s, cy0 * s), ((cx0 + side) * s, (cy0 + side) * s), (100, 100, 100), 1)
+        crop_x = (w_img - side) // 2
+        crop_y = (h_img - side) // 2
 
-        # Draw target crosshair at (50% width, 75% height)
-        tx, ty = int(w_img * 0.5 * s), int(h_img * 0.75 * s)
-        cv2.line(vis, (tx - 10, ty), (tx + 10, ty), (0, 180, 255), 1)
-        cv2.line(vis, (tx, ty - 10), (tx, ty + 10), (0, 180, 255), 1)
+        # Crop
+        cv2.rectangle(
+            pov_vis,
+            (crop_x * pov_scale, crop_y * pov_scale),
+            ((crop_x + side) * pov_scale, (crop_y + side) * pov_scale),
+            (100, 100, 100),
+            1,
+        )
+
+        # Crosshair
+        tx = int(w_img * 0.5 * pov_scale)
+        ty = int(h_img * 0.75 * pov_scale)
+        cv2.line(pov_vis, (tx - 10, ty), (tx + 10, ty), (0, 180, 255), 1)
+        cv2.line(pov_vis, (tx, ty - 10), (tx, ty + 10), (0, 180, 255), 1)
 
         h_err_str = "---"
         v_err_str = "---"
+        align_str = "---"
         fill = 0.0
         est_dist = float("nan")
 
         if det is not None:
             cube_cx, cube_cy, psize, (bx, by, bw, bh) = det
             fill = psize / side
+
             fg, _, _ = self._focal(w_img, h_img)
             est_dist = (CUBE_SIZE_M * fg) / psize if psize > 0 else float("nan")
 
-            cv2.rectangle(vis, (bx * s, by * s), ((bx + bw) * s, (by + bh) * s), COL_BOX, 2)
-            cd = int(cube_cx * s), int(cube_cy * s)
-            arm = max(5, s)
-            cv2.line(vis, (cd[0] - arm, cd[1]), (cd[0] + arm, cd[1]), COL_X, 1)
-            cv2.line(vis, (cd[0], cd[1] - arm), (cd[0], cd[1] + arm), COL_X, 1)
+            # Bbox
+            cv2.rectangle(
+                pov_vis,
+                (bx * pov_scale, by * pov_scale),
+                ((bx + bw) * pov_scale, (by + bh) * pov_scale),
+                COL_BOX,
+                2,
+            )
 
-            # Line from target to cube
-            cv2.line(vis, (tx, ty), (cd[0], cd[1]), (0, 180, 255), 1)
+            cxp, cyp = int(cube_cx * pov_scale), int(cube_cy * pov_scale)
+            arm = max(5, pov_scale)
+            cv2.line(pov_vis, (cxp - arm, cyp), (cxp + arm, cyp), COL_X, 1)
+            cv2.line(pov_vis, (cxp, cyp - arm), (cxp, cyp + arm), COL_X, 1)
+            cv2.line(pov_vis, (tx, ty), (cxp, cyp), (0, 180, 255), 1)
 
-            h_err_frac = (cube_cx - w_img / 2.0) / (w_img / 2.0)
-            v_err_frac = (cube_cy - h_img * 0.75) / (h_img / 2.0)
-            h_err_str = f"{h_err_frac:+.2f}"
-            v_err_str = f"{v_err_frac:+.2f}"
+            h_err = (cube_cx - w_img / 2.0) / (w_img / 2.0)
+            v_err = (cube_cy - h_img * 0.75) / (h_img / 2.0)
+
+            h_err_str = f"{h_err:+.2f}"
+            v_err_str = f"{v_err:+.2f}"
+
+            align = max(
+                0.3,
+                max(0.0, 1.0 - 2.0 * abs(h_err)) *
+                max(0.0, 1.0 - 2.0 * abs(v_err)),
+            )
+            align_str = f"{align:.2f}"
         else:
-            cv2.putText(vis, "NO CUBE", (4, H // 2), font, fs, COL_MISS, th, cv2.LINE_AA)
+            cv2.putText(pov_vis, "NO CUBE", (4, H // 2), font, fs, COL_MISS, th, cv2.LINE_AA)
 
-        ee = est_dist - true_dist if (math.isfinite(est_dist) and true_dist > 0) else float("nan")
+        est_err = est_dist - true_dist if (math.isfinite(est_dist) and true_dist > 0) else float("nan")
         status = "STOPPED" if self._stopped else "active"
 
-        # Mid joint headroom for raising (distance from lower limit)
         mid_range = J_MID_HI - J_MID_LO
         mid_headroom_up = self._mid_pos - J_MID_LO
+        mid_pct = 100.0 * mid_headroom_up / mid_range if mid_range > 1e-9 else 0.0
         mid_saturated = mid_headroom_up < MID_LIMIT_THRESH * mid_range
-        mid_pct = mid_headroom_up / mid_range * 100.0
         mid_col = (50, 50, 240) if mid_saturated else (180, 255, 180)
         mid_tag = " [END FALLBACK]" if mid_saturated else ""
-
-        # Recompute alignment factor for display
-        if det is not None:
-            _hf = (cube_cx - w_img / 2.0) / (w_img / 2.0)
-            _vf = (cube_cy - h_img * 0.7) / (h_img / 2.0)
-            _af = max(0.3, max(0.0, 1.0 - 2.0 * abs(_hf)) * max(0.0, 1.0 - 2.0 * abs(_vf)))
-            align_str = f"{_af:.2f}"
-        else:
-            align_str = "---"
 
         rows = [
             (f"True: {true_dist:.4f}m", COL_TOF),
             (f"ToF:  {tof_dist:.4f}m" if math.isfinite(tof_dist) else "ToF: ---", (200, 200, 0)),
             (f"Est:  {est_dist:.4f}m" if math.isfinite(est_dist) else "Est: ---", COL_EST),
+            (f"Err:  {est_err:+.4f}m" if math.isfinite(est_err) else "Err:  ---", COL_ERR_OK if math.isfinite(est_err) and abs(est_err) < 0.03 else COL_ERR_BAD),
             (f"H_err: {h_err_str}  V_err: {v_err_str}  align: {align_str}", (255, 200, 0)),
             (f"Fill: {fill:.0%} [{status}]", (200, 255, 200)),
             (f"mid_pos: {math.degrees(self._mid_pos):.1f}deg  hdroom:{mid_pct:.0f}%{mid_tag}", mid_col),
         ]
+
         for i, (txt, col) in enumerate(rows):
-            cv2.putText(vis, txt, (4, gap + i * gap), font, fs, col, th, cv2.LINE_AA)
-        cv2.imshow("pov | detection", vis)
+            cv2.putText(pov_vis, txt, (4, gap + i * gap), font, fs, col, th, cv2.LINE_AA)
+            
+        scene_small = cv2.resize(
+            scene_bgr,
+            (scene_bgr.shape[1] // scene_div, scene_bgr.shape[0] // scene_div),
+            interpolation=cv2.INTER_AREA,
+        )
 
-        cropped, _, _ = self._center_crop_square(raw_bgr)
-        cv2.imshow("enhanced crop", self._enhance(cropped))
+        if scene_small.shape[0] != pov_vis.shape[0]:
+            new_w = int(scene_small.shape[1] * (pov_vis.shape[0] / scene_small.shape[0]))
+            scene_small = cv2.resize(
+                scene_small,
+                (new_w, pov_vis.shape[0]),
+                interpolation=cv2.INTER_AREA,
+            )
 
-        scene_bgr = cv2.cvtColor(env._render_fixedcam(env._mjv_cam_scene), cv2.COLOR_RGB2BGR)
-        env._draw_hud(scene_bgr)
-        cv2.imshow("scene", cv2.resize(scene_bgr,
-                   (scene_bgr.shape[1] // scene_div, scene_bgr.shape[0] // scene_div),
-                   interpolation=cv2.INTER_AREA))
+        cv2_rendering_frame = np.concatenate([pov_vis, scene_small], axis=1)
+        cv2.imshow("cv2 rendering frame", cv2_rendering_frame)
+
+def run(args):
+    env = ArmEnv(
+        xml_path=str(Path("Simulation") / "Assets" / "scene.xml"),
+        width=args.img_w, height=args.img_h,
+        display=False, discount=0.99,
+        episode_horizon=args.episode_horizon,
+        enable_domain_randomization=args.domain_rand,
+    )
+    
+    ctrl = ColorDetectControl()
+    step_count = 0
+
+    def reset_episode():
+        nonlocal step_count
+        env.reset()
+        ctrl.reset()
+        step_count = 0
+
+    reset_episode()
+    while True:
+        ctrl.run_sim(env, pov_scale=args.pov_scale, scene_div=args.scene_div)
+        key = cv2.waitKey(args.delay_ms) & 0xFF
+        if key in (ord("q"), 27): 
+            break
+
+        env._gl_ctx.make_current()
+        image_rgb = env._render_fixedcam(env._mjv_cam_pov)
+        tof_m = float(env.last_tof_m)
+
+        # Pass env so ctrl can read joint positions for limit detection
+        action = ctrl.step(image_rgb, tof_m, env=env)
+        result = env.step(action)
+        step_count += 1
+
+        if ctrl.is_stopped:
+            print(f"STOPPED (fill >= {ctrl._get_fill_fraction(image_rgb):.0%}) "
+                  f"at step {step_count}, tof={tof_m:.4f}m")
+            while True:
+                ctrl.run_sim(env, pov_scale=args.pov_scale, scene_div=args.scene_div)
+                k = cv2.waitKey(100) & 0xFF
+                if k in (ord("q"), 27): 
+                    cv2.destroyAllWindows()
+                    return
+
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--img_w", type=int, default=640)
+    p.add_argument("--img_h", type=int, default=480)
+    p.add_argument("--episode_horizon", type=int, default=600)
+    p.add_argument("--domain_rand", action=argparse.BooleanOptionalAction, default=False)
+    p.add_argument("--pov_scale", type=int, default=1)
+    p.add_argument("--scene_div", type=int, default=2)
+    p.add_argument("--delay_ms", type=int, default=30)
+    run(p.parse_args())
